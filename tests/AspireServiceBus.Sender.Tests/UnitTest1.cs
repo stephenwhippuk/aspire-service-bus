@@ -51,4 +51,15 @@ public class SendMessageRequestValidatorTests
 
         Assert.Equal("Endpoint=sb://localhost/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=test", connectionString);
     }
+
+    [Fact]
+    public void CreateClientErrorMessage_ReturnsGenericMessage()
+    {
+        var exception = new InvalidOperationException("sensitive details");
+
+        var message = SenderEndpoints.CreateClientErrorMessage(exception);
+
+        Assert.Equal("An unexpected error occurred while sending the message.", message);
+        Assert.DoesNotContain("sensitive details", message, StringComparison.OrdinalIgnoreCase);
+    }
 }
