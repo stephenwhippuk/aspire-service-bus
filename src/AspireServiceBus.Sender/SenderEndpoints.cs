@@ -8,9 +8,9 @@ public static class SenderEndpoints
     private static readonly SemaphoreSlim _logFileLock = new(1, 1);
     public static IEndpointRouteBuilder MapSenderEndpoints(this IEndpointRouteBuilder app, string queueName, string? localLogPath)
     {
-        app.MapPost("/send", async (SendMessageRequest request, ILoggerFactory loggerFactory, ServiceBusClient? client, CancellationToken cancellationToken) =>
+        var logger = ((IApplicationBuilder)app).ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("SenderEndpoints");
+        app.MapPost("/send", async (SendMessageRequest request, ServiceBusClient? client, CancellationToken cancellationToken) =>
         {
-            var logger = loggerFactory.CreateLogger("SenderEndpoints");
             var validationError = SendMessageRequestValidator.Validate(request);
             if (validationError is not null)
             {
