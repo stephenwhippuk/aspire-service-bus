@@ -5,6 +5,11 @@ namespace AspireServiceBus.Receiver;
 
 public class Worker : BackgroundService
 {
+    private static readonly JsonSerializerOptions PrettyJsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
     private readonly ILogger<Worker> _logger;
     private readonly ServiceBusClient? _client;
     private readonly IConfiguration _configuration;
@@ -55,11 +60,16 @@ public class Worker : BackgroundService
                     timestamp = DateTimeOffset.UtcNow,
                     queue = queueName,
                     messageId = args.Message.MessageId,
-                    headers = args.Message.ApplicationProperties,
+                    headers = args.Message.ApplicationProperties
+                        .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(entry => entry.Key, entry => entry.Value),
                     body = bodyJson.RootElement.Clone()
                 };
 
-                _logger.LogInformation("{payload}", JsonSerializer.Serialize(logPayload));
+                var prettyPayload = JsonSerializer.Serialize(logPayload, PrettyJsonOptions);
+
+                _logger.LogInformation("Received message {MessageId} on queue {QueueName}", args.Message.MessageId, queueName);
+                Console.WriteLine(prettyPayload);
                 await AppendLocalLogAsync(logPayload, stoppingToken);
                 await args.CompleteMessageAsync(args.Message, stoppingToken);
             }
@@ -134,6 +144,7 @@ public class Worker : BackgroundService
             Directory.CreateDirectory(directory);
         }
 
-        await File.AppendAllTextAsync(_localLogPath, JsonSerializer.Serialize(payload) + Environment.NewLine, cancellationToken);
+        var prettyPayload = JsonSerializer.Serialize(payload, PrettyJsonOptions);
+        await File.AppendAllTextAsync(_localLogPath, prettyPayload + Environment.NewLine + Environment.NewLine, cancellationToken);
     }
 }
