@@ -5,10 +5,12 @@ namespace AspireServiceBus.Sender;
 
 public static class SenderEndpoints
 {
+    private static readonly SemaphoreSlim _logFileLock = new(1, 1);
     public static IEndpointRouteBuilder MapSenderEndpoints(this IEndpointRouteBuilder app, string queueName, string? localLogPath)
     {
-        app.MapPost("/send", async (SendMessageRequest request, ServiceBusClient? client, CancellationToken cancellationToken) =>
+        app.MapPost("/send", async (SendMessageRequest request, ILoggerFactory loggerFactory, ServiceBusClient? client, CancellationToken cancellationToken) =>
         {
+            var logger = loggerFactory.CreateLogger("SenderEndpoints");
             var validationError = SendMessageRequestValidator.Validate(request);
             if (validationError is not null)
             {
@@ -84,16 +86,17 @@ public static class SenderEndpoints
             }
             catch (Exception ex)
             {
+                logger.LogError(ex, "Unexpected error sending message to queue {Queue}", queueName);
                 await AppendLocalLogAsync(localLogPath, new
                 {
                     timestamp = DateTimeOffset.UtcNow,
                     service = "sender",
                     action = "send-failed",
                     queue = queueName,
-                    error = ex.Message
+                    error = "An unexpected error occurred while sending the message."
                 }, cancellationToken);
 
-                return Results.Json(new { error = $"Send failed: {ex.Message}" }, statusCode: 500);
+                return Results.Json(new { error = "An unexpected error occurred while sending the message." }, statusCode: 500);
             }
         });
 
@@ -118,7 +121,15 @@ public static class SenderEndpoints
             Directory.CreateDirectory(directory);
         }
 
-        await File.AppendAllTextAsync(logFilePath, JsonSerializer.Serialize(payload) + Environment.NewLine, cancellationToken);
+        await _logFileLock.WaitAsync(cancellationToken);
+        try
+        {
+            await File.AppendAllTextAsync(logFilePath, JsonSerializer.Serialize(payload) + Environment.NewLine, cancellationToken);
+        }
+        finally
+        {
+            _logFileLock.Release();
+        }
     }
 }
 
