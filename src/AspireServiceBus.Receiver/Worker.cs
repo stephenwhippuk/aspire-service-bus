@@ -69,8 +69,8 @@ public class Worker : BackgroundService
                 var prettyPayload = JsonSerializer.Serialize(logPayload, PrettyJsonOptions);
 
                 _logger.LogInformation("Received message {MessageId} on queue {QueueName}", args.Message.MessageId, queueName);
-                Console.WriteLine(prettyPayload);
-                await AppendLocalLogAsync(logPayload, stoppingToken);
+                _logger.LogInformation("Payload:{NewLine}{Payload}", Environment.NewLine, prettyPayload);
+                await AppendLocalLogAsync(prettyPayload, stoppingToken);
                 await args.CompleteMessageAsync(args.Message, stoppingToken);
             }
             catch (JsonException ex)
@@ -133,6 +133,12 @@ public class Worker : BackgroundService
 
     private async Task AppendLocalLogAsync(object payload, CancellationToken cancellationToken)
     {
+        var prettyPayload = JsonSerializer.Serialize(payload, PrettyJsonOptions);
+        await AppendLocalLogAsync(prettyPayload, cancellationToken);
+    }
+
+    private async Task AppendLocalLogAsync(string serializedPayload, CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(_localLogPath))
         {
             return;
@@ -144,7 +150,6 @@ public class Worker : BackgroundService
             Directory.CreateDirectory(directory);
         }
 
-        var prettyPayload = JsonSerializer.Serialize(payload, PrettyJsonOptions);
-        await File.AppendAllTextAsync(_localLogPath, prettyPayload + Environment.NewLine + Environment.NewLine, cancellationToken);
+        await File.AppendAllTextAsync(_localLogPath, serializedPayload + Environment.NewLine + Environment.NewLine, cancellationToken);
     }
 }
