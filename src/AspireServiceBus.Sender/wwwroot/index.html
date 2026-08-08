@@ -70,15 +70,24 @@
         function addHeaderRow(key = '', value = '') {
             const row = document.createElement('div');
             row.className = 'custom-row';
-            row.innerHTML = `
-                <input placeholder="header key" value="${key}">
-                <input placeholder="header value" value="${value}">
-                <button type="button">Remove</button>
-            `;
-            row.querySelector('button').addEventListener('click', () => {
+
+            const keyInput = document.createElement('input');
+            keyInput.placeholder = 'header key';
+            keyInput.value = key;
+
+            const valueInput = document.createElement('input');
+            valueInput.placeholder = 'header value';
+            valueInput.value = value;
+
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.textContent = 'Remove';
+            removeButton.addEventListener('click', () => {
                 row.remove();
                 validateForm();
             });
+
+            row.append(keyInput, valueInput, removeButton);
             customHeadersDiv.appendChild(row);
         }
 

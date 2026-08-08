@@ -5,10 +5,16 @@ namespace AspireServiceBus.Sender;
 
 public static class SenderEndpoints
 {
+    private static readonly SemaphoreSlim LogWriteLock = new(1, 1);
+
     public static IEndpointRouteBuilder MapSenderEndpoints(this IEndpointRouteBuilder app, string queueName, string? localLogPath)
     {
-        app.MapPost("/send", async (SendMessageRequest request, ServiceBusClient? client, CancellationToken cancellationToken) =>
+        app.MapPost("/send", async (HttpContext httpContext, SendMessageRequest request, CancellationToken cancellationToken) =>
         {
+            var loggerFactory = httpContext.RequestServices.GetRequiredService<ILoggerFactory>();
+            var logger = loggerFactory.CreateLogger("SenderEndpoints");
+            var client = httpContext.RequestServices.GetService<ServiceBusClient>();
+
             var validationError = SendMessageRequestValidator.Validate(request);
             if (validationError is not null)
             {
@@ -84,20 +90,31 @@ public static class SenderEndpoints
             }
             catch (Exception ex)
             {
+                var clientErrorMessage = CreateClientErrorMessage(ex);
+
+                logger.LogError(ex, "Failed to send message to queue {QueueName}", queueName);
+
                 await AppendLocalLogAsync(localLogPath, new
                 {
                     timestamp = DateTimeOffset.UtcNow,
                     service = "sender",
                     action = "send-failed",
                     queue = queueName,
-                    error = ex.Message
+                    error = clientErrorMessage,
+                    exception = ex.ToString()
                 }, cancellationToken);
 
-                return Results.Json(new { error = $"Send failed: {ex.Message}" }, statusCode: 500);
+                return Results.Json(new { error = clientErrorMessage }, statusCode: 500);
             }
         });
 
         return app;
+    }
+
+    public static string CreateClientErrorMessage(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        return "An unexpected error occurred while sending the message.";
     }
 
     private static bool IsTransientServiceBusFailure(ServiceBusException ex)
@@ -112,13 +129,22 @@ public static class SenderEndpoints
             return;
         }
 
-        var directory = Path.GetDirectoryName(logFilePath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        await LogWriteLock.WaitAsync(cancellationToken);
 
-        await File.AppendAllTextAsync(logFilePath, JsonSerializer.Serialize(payload) + Environment.NewLine, cancellationToken);
+        try
+        {
+            var directory = Path.GetDirectoryName(logFilePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await File.AppendAllTextAsync(logFilePath, JsonSerializer.Serialize(payload) + Environment.NewLine, cancellationToken);
+        }
+        finally
+        {
+            LogWriteLock.Release();
+        }
     }
 }
 
