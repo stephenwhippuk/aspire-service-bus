@@ -5,10 +5,8 @@ namespace AspireServiceBus.Sender;
 
 public static class SenderEndpoints
 {
-    private static readonly SemaphoreSlim _logFileLock = new(1, 1);
     public static IEndpointRouteBuilder MapSenderEndpoints(this IEndpointRouteBuilder app, string queueName, string? localLogPath)
     {
-        var logger = ((IApplicationBuilder)app).ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("SenderEndpoints");
         app.MapPost("/send", async (SendMessageRequest request, ServiceBusClient? client, CancellationToken cancellationToken) =>
         {
             var validationError = SendMessageRequestValidator.Validate(request);
@@ -86,17 +84,16 @@ public static class SenderEndpoints
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Unexpected error sending message to queue {Queue}", queueName);
                 await AppendLocalLogAsync(localLogPath, new
                 {
                     timestamp = DateTimeOffset.UtcNow,
                     service = "sender",
                     action = "send-failed",
                     queue = queueName,
-                    error = "An unexpected error occurred while sending the message."
+                    error = ex.Message
                 }, cancellationToken);
 
-                return Results.Json(new { error = "An unexpected error occurred while sending the message." }, statusCode: 500);
+                return Results.Json(new { error = $"Send failed: {ex.Message}" }, statusCode: 500);
             }
         });
 
@@ -121,15 +118,7 @@ public static class SenderEndpoints
             Directory.CreateDirectory(directory);
         }
 
-        await _logFileLock.WaitAsync(cancellationToken);
-        try
-        {
-            await File.AppendAllTextAsync(logFilePath, JsonSerializer.Serialize(payload) + Environment.NewLine, cancellationToken);
-        }
-        finally
-        {
-            _logFileLock.Release();
-        }
+        await File.AppendAllTextAsync(logFilePath, JsonSerializer.Serialize(payload) + Environment.NewLine, cancellationToken);
     }
 }
 
