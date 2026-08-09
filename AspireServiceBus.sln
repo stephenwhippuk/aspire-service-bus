@@ -15,6 +15,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{28191583
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireServiceBus.Sender.Tests", "tests\AspireServiceBus.Sender.Tests\AspireServiceBus.Sender.Tests.csproj", "{C986AD90-E23A-409E-81A7-19E20A6A34DA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireServiceBus.Receiver.Tests", "tests\AspireServiceBus.Receiver.Tests\AspireServiceBus.Receiver.Tests.csproj", "{18FDF466-47DD-472A-95D4-B85A15BC672D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,11 +42,16 @@ Global
 		{C986AD90-E23A-409E-81A7-19E20A6A34DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C986AD90-E23A-409E-81A7-19E20A6A34DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C986AD90-E23A-409E-81A7-19E20A6A34DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{18FDF466-47DD-472A-95D4-B85A15BC672D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{18FDF466-47DD-472A-95D4-B85A15BC672D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{18FDF466-47DD-472A-95D4-B85A15BC672D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{18FDF466-47DD-472A-95D4-B85A15BC672D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{5596208B-FD99-4852-9EE6-821F7D8CF114} = {F4C7FB02-E960-419B-8033-FAC0F01AC7ED}
 		{E0379640-B074-4E34-BB37-1E857210FF08} = {F4C7FB02-E960-419B-8033-FAC0F01AC7ED}
 		{5188AD08-98E7-47D8-B11C-30CEB59C0D78} = {F4C7FB02-E960-419B-8033-FAC0F01AC7ED}
 		{C986AD90-E23A-409E-81A7-19E20A6A34DA} = {28191583-89FA-4470-8D35-E3BB90030A7F}
+		{18FDF466-47DD-472A-95D4-B85A15BC672D} = {28191583-89FA-4470-8D35-E3BB90030A7F}
 	EndGlobalSection
 EndGlobal

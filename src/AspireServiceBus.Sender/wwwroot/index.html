@@ -4,55 +4,276 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Aspire Service Bus Sender</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
     <style>
-        body { font-family: sans-serif; margin: 2rem auto; max-width: 920px; padding: 0 1rem; }
-        h1 { margin-bottom: 0.5rem; }
-        .row { display: grid; grid-template-columns: 220px 1fr; gap: 0.75rem; margin-bottom: 0.75rem; align-items: center; }
-        input, textarea, button { font: inherit; padding: 0.55rem; }
-        textarea { min-height: 220px; }
-        .headers { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem; }
-        .custom-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-bottom: 0.5rem; }
-        .status { margin-top: 1rem; font-weight: 600; }
-        .ok { color: #0b7a2a; }
-        .err { color: #b42318; }
-        .field-error { border-color: #b42318; outline-color: #b42318; }
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #030706 0%, #07120d 45%, #020403 100%);
+            color: #f3f8f2;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .page-shell {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem 3rem;
+        }
+
+        .brand-accent {
+            color: #5ef08e;
+        }
+
+        .glass-card {
+            background: rgba(7, 16, 10, 0.92);
+            border: 1px solid rgba(94, 240, 142, 0.25);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+        }
+
+        .form-control, .form-select {
+            background-color: #07120d;
+            color: #f3f8f2;
+            border-color: rgba(94, 240, 142, 0.25);
+        }
+
+        .form-control:focus, .form-select:focus {
+            background-color: #07120d;
+            color: #f3f8f2;
+            border-color: #5ef08e;
+            box-shadow: 0 0 0 0.2rem rgba(94, 240, 142, 0.2);
+        }
+
+        .form-control::placeholder {
+            color: #7d8f81;
+        }
+
+        .nav-pills .nav-link {
+            color: #9fdab2;
+            border-radius: 999px;
+            padding: 0.55rem 0.95rem;
+        }
+
+        .nav-pills .nav-link.active {
+            background-color: #1d5f33;
+            color: white;
+        }
+
+        .btn-outline-success {
+            color: #5ef08e;
+            border-color: #5ef08e;
+        }
+
+        .btn-outline-success:hover {
+            background-color: #1d5f33;
+            color: white;
+            border-color: #1d5f33;
+        }
+
+        .btn-outline-light {
+            color: #e6f7ec;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-outline-light:hover {
+            background-color: rgba(255, 255, 255, 0.12);
+            color: white;
+        }
+
+        .status-message {
+            min-height: 1.75rem;
+            font-weight: 600;
+        }
+
+        .status-success {
+            color: #5ef08e;
+        }
+
+        .status-error {
+            color: #ff8a80;
+        }
+
+        .muted {
+            color: #f7f7f7;
+        }
+
+        .placeholder-card {
+            border: 1px dashed rgba(94, 240, 142, 0.25);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            background: rgba(9, 24, 14, 0.65);
+        }
+
+        .history-card {
+            border: 1px solid rgba(94, 240, 142, 0.2);
+            border-radius: 1rem;
+            background: rgba(10, 24, 15, 0.94);
+            padding: 1rem;
+        }
+
+        .history-card .meta {
+            font-size: 0.86rem;
+            color: #8ca492;
+        }
+
+        .history-card pre {
+            margin: 0.5rem 0 0;
+            white-space: pre-wrap;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+            color: #dfeee2;
+            font-size: 0.9rem;
+        }
+
+        .offcanvas-dark {
+            background: #040806;
+            color: #f3f8f2;
+        }
+
+        .offcanvas-dark .form-control {
+            background-color: #07120d;
+            color: #f3f8f2;
+        }
     </style>
 </head>
 <body>
-    <h1>Message Sender</h1>
-    <p>Queue: <strong>default-queue</strong></p>
+    <div class="page-shell">
+        <header class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+            <div>
+                <p class="text-uppercase small mb-2 brand-accent"><i class="fa-solid fa-satellite-dish"></i> Aspire Service Bus</p>
+                <h1 class="display-6 fw-semibold mb-2">Message orchestration studio</h1>
+                <p class="mb-0 muted">Queue: <strong class="text-white">default-queue</strong></p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-success" id="newMessageBtn"><i class="fa-solid fa-plus"></i> New message</button>
+                <button type="button" class="btn btn-outline-light" id="refreshHistoryBtn"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+            </div>
+        </header>
 
-    <div class="headers">
-        <div class="row">
-            <label for="timestamp">timestamp</label>
-            <input id="timestamp" />
-        </div>
-        <div class="row">
-            <label for="entityName">entity-name</label>
-            <input id="entityName" value="default-queue" />
-        </div>
-        <div class="row">
-            <label for="targetApplication">target-application</label>
-            <input id="targetApplication" value="receiver" />
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <div class="card glass-card h-100">
+                    <div class="card-body">
+                        <h2 class="h5 fw-semibold mb-3"><i class="fa-solid fa-layer-group brand-accent"></i> Demo context</h2>
+                        <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background: rgba(94, 240, 142, 0.08);">
+                            <span class="muted">Queue state</span>
+                            <span class="badge bg-success-subtle text-success-emphasis">Live</span>
+                        </div>
+                        <ul class="list-unstyled small mb-0">
+                            <li class="mb-2"><i class="fa-solid fa-bolt brand-accent"></i> Sender remains the focus of the demo.</li>
+                            <li class="mb-2"><i class="fa-solid fa-microchip brand-accent"></i> Durable function remains a contextual placeholder.</li>
+                            <li><i class="fa-solid fa-shield-halved brand-accent"></i> Success and failed history are now visible in the workflow view.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="card glass-card">
+                    <div class="card-body">
+                        <ul class="nav nav-pills mb-3" id="statusTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#pendingPane" type="button">Pending</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#processingPane" type="button">Processing</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#successPane" type="button">Success</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#failedPane" type="button">Failed</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#receivedPane" type="button">Received</button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="pendingPane">
+                                <div class="placeholder-card">
+                                    <h3 class="h6 fw-semibold mb-2"><i class="fa-regular fa-clock brand-accent"></i> Pending</h3>
+                                    <p class="mb-0 muted">This view will be wired up later. For now the placeholder stays in the same visual language as the rest of the experience.</p>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="processingPane">
+                                <div class="placeholder-card">
+                                    <h3 class="h6 fw-semibold mb-2"><i class="fa-solid fa-spinner brand-accent"></i> Processing</h3>
+                                    <p class="mb-0 muted">This view will be wired up later. For now the placeholder stays in the same visual language as the rest of the experience.</p>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="successPane">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h3 class="h6 fw-semibold mb-0"><i class="fa-solid fa-circle-check brand-accent"></i> Success history</h3>
+                                    <button type="button" class="btn btn-sm btn-outline-success" id="purgeSuccessBtn"><i class="fa-solid fa-broom"></i> Purge</button>
+                                </div>
+                                <div id="successHistory"></div>
+                            </div>
+                            <div class="tab-pane fade" id="failedPane">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h3 class="h6 fw-semibold mb-0"><i class="fa-solid fa-triangle-exclamation brand-accent"></i> Failed history</h3>
+                                    <button type="button" class="btn btn-sm btn-outline-success" id="purgeFailedBtn"><i class="fa-solid fa-broom"></i> Purge</button>
+                                </div>
+                                <div id="failedHistory"></div>
+                            </div>
+                            <div class="tab-pane fade" id="receivedPane">
+                                <div class="placeholder-card">
+                                    <h3 class="h6 fw-semibold mb-2"><i class="fa-solid fa-envelope-open-text brand-accent"></i> Received</h3>
+                                    <p class="mb-0 muted">This view will be wired up later. For now the placeholder stays in the same visual language as the rest of the experience.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <h2>Custom Headers</h2>
-    <div id="customHeaders"></div>
-    <button type="button" id="addHeader">Add Header</button>
+    <div class="offcanvas offcanvas-end offcanvas-dark" tabindex="-1" id="composerOffcanvas" aria-labelledby="composerOffcanvasLabel">
+        <div class="offcanvas-header border-bottom border-success-subtle">
+            <div>
+                <h5 class="offcanvas-title" id="composerOffcanvasLabel"><i class="fa-solid fa-pen-to-square brand-accent"></i> Compose message</h5>
+                <p class="mb-0 small muted">Create or edit a message before sending it to the queue.</p>
+            </div>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <div class="mb-3">
+                <label for="timestamp" class="form-label">timestamp</label>
+                <input id="timestamp" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label for="entityName" class="form-label">entity-name</label>
+                <input id="entityName" class="form-control" value="default-queue" />
+            </div>
+            <div class="mb-3">
+                <label for="targetApplication" class="form-label">target-application</label>
+                <input id="targetApplication" class="form-control" value="receiver" />
+            </div>
 
-    <h2>Body (JSON)</h2>
-    <textarea id="bodyJson">{
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="form-label mb-0">Custom headers</label>
+                <button type="button" class="btn btn-sm btn-outline-success" id="addHeader"><i class="fa-solid fa-plus"></i> Add header</button>
+            </div>
+            <div id="customHeaders" class="mb-3"></div>
+
+            <div class="mb-3">
+                <label for="bodyJson" class="form-label">Body (JSON)</label>
+                <textarea id="bodyJson" class="form-control" rows="12">{
     "message": "hello"
 }</textarea>
+            </div>
 
-    <div style="margin-top: 1rem;">
-        <button type="button" id="sendBtn">Send</button>
+            <div id="validationSummary" class="status-message status-error mb-3" style="display:none;"></div>
+            <div id="status" class="status-message"></div>
+
+            <div class="d-flex flex-wrap gap-2 mt-4">
+                <button type="button" class="btn btn-outline-success" id="sendBtn"><i class="fa-solid fa-paper-plane"></i> Send</button>
+            </div>
+        </div>
     </div>
 
-    <div id="validationSummary" class="status err" style="display:none;"></div>
-    <div id="status" class="status"></div>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const timestampInput = document.getElementById('timestamp');
         const entityNameInput = document.getElementById('entityName');
@@ -60,41 +281,79 @@
         const bodyInput = document.getElementById('bodyJson');
         const addHeaderBtn = document.getElementById('addHeader');
         const sendBtn = document.getElementById('sendBtn');
+        const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+        const newMessageBtn = document.getElementById('newMessageBtn');
+        const purgeSuccessBtn = document.getElementById('purgeSuccessBtn');
+        const purgeFailedBtn = document.getElementById('purgeFailedBtn');
         const customHeadersDiv = document.getElementById('customHeaders');
         const validationSummary = document.getElementById('validationSummary');
         const statusDiv = document.getElementById('status');
+        const successHistoryDiv = document.getElementById('successHistory');
+        const failedHistoryDiv = document.getElementById('failedHistory');
+        const composerOffcanvas = document.getElementById('composerOffcanvas');
 
         const validationInputs = [timestampInput, entityNameInput, targetAppInput, bodyInput];
+        const offcanvas = new bootstrap.Offcanvas(composerOffcanvas);
+
         timestampInput.value = new Date().toISOString();
+
+        function resetForm() {
+            timestampInput.value = new Date().toISOString();
+            entityNameInput.value = 'default-queue';
+            targetAppInput.value = 'receiver';
+            bodyInput.value = '{\n    "message": "hello"\n}';
+            clearHeaders();
+            addHeaderRow();
+            validateForm();
+        }
 
         function addHeaderRow(key = '', value = '') {
             const row = document.createElement('div');
-            row.className = 'custom-row';
+            row.className = 'row g-2 mb-2';
 
+            const keyCol = document.createElement('div');
+            keyCol.className = 'col-5';
             const keyInput = document.createElement('input');
+            keyInput.className = 'form-control form-control-sm';
             keyInput.placeholder = 'header key';
             keyInput.value = key;
 
+            const valueCol = document.createElement('div');
+            valueCol.className = 'col-5';
             const valueInput = document.createElement('input');
+            valueInput.className = 'form-control form-control-sm';
             valueInput.placeholder = 'header value';
             valueInput.value = value;
 
+            const actionCol = document.createElement('div');
+            actionCol.className = 'col-2 d-grid';
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
-            removeButton.textContent = 'Remove';
+            removeButton.className = 'btn btn-outline-light btn-sm';
+            removeButton.innerHTML = '<i class="fa-solid fa-xmark"></i>';
             removeButton.addEventListener('click', () => {
                 row.remove();
                 validateForm();
             });
 
-            row.append(keyInput, valueInput, removeButton);
+            keyCol.appendChild(keyInput);
+            valueCol.appendChild(valueInput);
+            actionCol.appendChild(removeButton);
+            row.append(keyCol, valueCol, actionCol);
             customHeadersDiv.appendChild(row);
+        }
+
+        function clearHeaders() {
+            customHeadersDiv.innerHTML = '';
         }
 
         function getCustomHeaders() {
             const headers = {};
-            customHeadersDiv.querySelectorAll('.custom-row').forEach(row => {
+            customHeadersDiv.querySelectorAll('.row').forEach(row => {
                 const inputs = row.querySelectorAll('input');
+                if (inputs.length < 2) {
+                    return;
+                }
                 const key = inputs[0].value.trim();
                 const value = inputs[1].value.trim();
                 if (key && value) headers[key] = value;
@@ -103,7 +362,7 @@
         }
 
         function setFieldState(input, hasError) {
-            input.classList.toggle('field-error', hasError);
+            input.classList.toggle('is-invalid', hasError);
         }
 
         function validateForm() {
@@ -142,31 +401,183 @@
             return errors.length === 0;
         }
 
-        addHeaderBtn.addEventListener('click', () => {
-            addHeaderRow();
-            validateForm();
-        });
-
-        validationInputs.forEach(input => input.addEventListener('input', validateForm));
-        validateForm();
-
-        sendBtn.addEventListener('click', async () => {
-            statusDiv.className = 'status';
-            statusDiv.textContent = '';
-
-            if (!validateForm()) {
-                statusDiv.classList.add('err');
-                statusDiv.textContent = 'Please fix the validation errors before sending.';
-                return;
-            }
-
-            const payload = {
+        function buildPayload() {
+            return {
                 timestamp: timestampInput.value,
                 entityName: entityNameInput.value,
                 targetApplication: targetAppInput.value,
                 bodyJson: bodyInput.value,
                 customHeaders: getCustomHeaders()
             };
+        }
+
+        function setStatus(message, isError = false) {
+            statusDiv.className = 'status-message';
+            statusDiv.classList.add(isError ? 'status-error' : 'status-success');
+            statusDiv.textContent = message;
+        }
+
+        function populateFormFromEntry(entry) {
+            const request = entry.request || entry.Request || {};
+            timestampInput.value = request.timestamp || entry.timestamp || new Date().toISOString();
+            entityNameInput.value = request.entityName || entry.entityName || 'default-queue';
+            targetAppInput.value = request.targetApplication || entry.targetApplication || 'receiver';
+            bodyInput.value = request.bodyJson || entry.bodyJson || '{\n    "message": "hello"\n}';
+            clearHeaders();
+
+            const effectiveHeaders = entry.effectiveHeaders || entry.EffectiveHeaders || {};
+            const standardHeaders = ['timestamp', 'entity-name', 'target-application'];
+            Object.entries(effectiveHeaders).forEach(([key, value]) => {
+                if (!standardHeaders.includes(key.toLowerCase())) {
+                    addHeaderRow(key, value);
+                }
+            });
+
+            if (customHeadersDiv.querySelectorAll('.row').length === 0) {
+                addHeaderRow();
+            }
+
+            validateForm();
+            offcanvas.show();
+        }
+
+        function getHistoryBodyPreview(entry) {
+            const request = entry.request || entry.Request || {};
+            const body = request.bodyJson || entry.bodyJson || '';
+            return body.length > 170 ? `${body.slice(0, 167)}...` : body;
+        }
+
+        function renderHistory(container, history, label, actionLabel, actionHandler) {
+            container.innerHTML = '';
+            if (!history.items || history.items.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 muted">No entries yet.</div>';
+                return;
+            }
+
+            const list = document.createElement('div');
+            list.className = 'd-grid gap-3';
+
+            history.items.forEach(entry => {
+                const card = document.createElement('div');
+                card.className = 'history-card';
+
+                const meta = document.createElement('div');
+                meta.className = 'meta mb-2';
+                meta.textContent = `${new Date(entry.createdAtUtc || entry.createdAt || Date.now()).toLocaleString()} • ${entry.outcome || label}`;
+
+                const preview = document.createElement('pre');
+                preview.textContent = getHistoryBodyPreview(entry);
+
+                const footer = document.createElement('div');
+                footer.className = 'd-flex flex-wrap gap-2 mt-3';
+
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'btn btn-sm btn-outline-success';
+                editBtn.innerHTML = '<i class="fa-solid fa-pen"></i> Edit';
+                editBtn.addEventListener('click', () => {
+                    populateFormFromEntry(entry);
+                    setStatus(`Loaded history entry ${entry.id} into the form.`, false);
+                });
+
+                const actionBtn = document.createElement('button');
+                actionBtn.type = 'button';
+                actionBtn.className = 'btn btn-sm btn-outline-light';
+                actionBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> ${actionLabel}`;
+                actionBtn.addEventListener('click', () => {
+                    populateFormFromEntry(entry);
+                    actionHandler(entry);
+                });
+
+                footer.append(editBtn, actionBtn);
+                card.append(meta, preview, footer);
+                list.appendChild(card);
+            });
+
+            container.appendChild(list);
+        }
+
+        async function loadHistory() {
+            try {
+                const [successResponse, failedResponse] = await Promise.all([
+                    fetch('/history/success?take=20&skip=0'),
+                    fetch('/history/failed?take=20&skip=0')
+                ]);
+
+                const successData = await successResponse.json();
+                const failedData = await failedResponse.json();
+                renderHistory(successHistoryDiv, successData, 'success', 'Resend', async entry => {
+                    populateFormFromEntry(entry);
+                    await resendEntry(entry);
+                });
+                renderHistory(failedHistoryDiv, failedData, 'failed', 'Repair & Resend', async entry => {
+                    populateFormFromEntry(entry);
+                    await resendEntry(entry);
+                });
+            } catch (err) {
+                setStatus(`Unable to load history: ${err.message}`, true);
+            }
+        }
+
+        async function resendEntry(entry) {
+            if (!validateForm()) {
+                setStatus('Please fix the validation errors before resending.', true);
+                return;
+            }
+
+            const payload = buildPayload();
+            try {
+                const response = await fetch(`/history/${entry.id}/resend`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    setStatus(`Resent from history entry ${entry.id}.`);
+                    await loadHistory();
+                } else {
+                    setStatus(data.error || 'Resend failed', true);
+                }
+            } catch (err) {
+                setStatus(err.message || 'Resend failed', true);
+            }
+        }
+
+        async function purgeHistory(outcome) {
+            try {
+                const response = await fetch(`/history/${outcome}`, { method: 'DELETE' });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    setStatus(`${outcome} history purged.`);
+                    await loadHistory();
+                } else {
+                    setStatus(data.error || 'Purge failed', true);
+                }
+            } catch (err) {
+                setStatus(err.message || 'Purge failed', true);
+            }
+        }
+
+        addHeaderBtn.addEventListener('click', () => {
+            addHeaderRow();
+            validateForm();
+        });
+
+        validationInputs.forEach(input => input.addEventListener('input', validateForm));
+        newMessageBtn.addEventListener('click', () => {
+            resetForm();
+            offcanvas.show();
+        });
+
+        sendBtn.addEventListener('click', async () => {
+            if (!validateForm()) {
+                setStatus('Please fix the validation errors before sending.', true);
+                return;
+            }
+
+            const payload = buildPayload();
 
             try {
                 const response = await fetch('/send', {
@@ -175,22 +586,29 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
 
                 if (response.ok) {
-                    statusDiv.classList.add('ok');
-                    statusDiv.textContent = `Sent to ${data.queue}. messageId=${data.messageId}`;
+                    setStatus(`Sent to ${data.queue}. messageId=${data.messageId}`);
                     timestampInput.value = new Date().toISOString();
                     validateForm();
+                    await loadHistory();
                 } else {
-                    statusDiv.classList.add('err');
-                    statusDiv.textContent = data.error || 'Send failed';
+                    setStatus(data.error || 'Send failed', true);
+                    await loadHistory();
                 }
             } catch (err) {
-                statusDiv.classList.add('err');
-                statusDiv.textContent = err.message || 'Send failed';
+                setStatus(err.message || 'Send failed', true);
             }
         });
+
+        refreshHistoryBtn.addEventListener('click', loadHistory);
+        purgeSuccessBtn.addEventListener('click', () => purgeHistory('success'));
+        purgeFailedBtn.addEventListener('click', () => purgeHistory('failed'));
+
+        resetForm();
+        validateForm();
+        loadHistory();
     </script>
 </body>
 </html>

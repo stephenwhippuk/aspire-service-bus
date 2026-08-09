@@ -122,6 +122,24 @@ Exit criteria:
 - [x] Structured logging implemented.
 - [x] Verification scenarios executed and recorded.
 
+## POC 0.3 Planning Track
+
+The following items are planned for the next presentation milestone and will be tracked in [poc-0.3-plan.md](poc-0.3-plan.md).
+
+### Receiver Modernisation
+
+- [ ] Create an Azure Functions-based receiver project.
+- [ ] Replace the current hosted receiver loop with a Service Bus-triggered Durable Functions workflow.
+- [ ] Update AppHost wiring so the function app starts with the local development resources.
+- [ ] Validate the sender-to-function delivery path end to end.
+
+### Sender Experience Refresh
+
+- [ ] Rework the sender page into a Bootstrap 5 layout.
+- [ ] Add an off-canvas compose/edit experience with a New Message entry point.
+- [ ] Introduce tabs for Pending, Processing, Success, Failed, and Received states.
+- [ ] Apply a black-and-green visual theme with Font Awesome icons and outline buttons.
+
 ## Done Criteria
 
 - [x] All Workstream A-E checklist items are complete.
