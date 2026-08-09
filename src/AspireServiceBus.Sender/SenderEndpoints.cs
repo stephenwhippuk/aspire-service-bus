@@ -143,7 +143,7 @@ public static class SenderEndpoints
 
             await historyStore.AppendAsync(CreateHistoryEntry(
                 queueName,
-                MessageHistoryOutcome.Success,
+                MessageHistoryOutcome.Processing,
                 request,
                 effectiveHeaders,
                 request.BodyJson,
@@ -160,7 +160,7 @@ public static class SenderEndpoints
                 headers = message.ApplicationProperties
             }, cancellationToken);
 
-            return Results.Ok(new { status = "sent", queue = queueName, messageId = message.MessageId });
+            return Results.Json(new { status = "processing", queue = queueName, messageId = message.MessageId }, statusCode: StatusCodes.Status202Accepted);
         }
         catch (ServiceBusException ex) when (IsTransientServiceBusFailure(ex))
         {

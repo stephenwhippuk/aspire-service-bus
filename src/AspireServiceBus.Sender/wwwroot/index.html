@@ -84,6 +84,19 @@
             font-weight: 600;
         }
 
+        .status-bar {
+            position: sticky;
+            bottom: 0;
+            z-index: 1030;
+            max-width: 1400px;
+            margin: 1.25rem auto 0;
+            padding: 0.95rem 1rem;
+            border: 1px solid rgba(94, 240, 142, 0.25);
+            border-radius: 1rem;
+            background: rgba(4, 12, 8, 0.95);
+            box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.2);
+        }
+
         .status-success {
             color: #5ef08e;
         }
@@ -107,7 +120,42 @@
             border: 1px solid rgba(94, 240, 142, 0.2);
             border-radius: 1rem;
             background: rgba(10, 24, 15, 0.94);
+            overflow: hidden;
+            flex: 0 0 auto;
+        }
+
+        .history-card .accordion-button {
+            background: transparent;
+            color: #f3f8f2;
+            box-shadow: none;
+            padding: 0.9rem 1rem;
+        }
+
+        .history-card .accordion-button:not(.collapsed) {
+            background: rgba(94, 240, 142, 0.08);
+            color: #f3f8f2;
+        }
+
+        .history-card .accordion-body {
+            background: rgba(255, 255, 255, 0.03);
             padding: 1rem;
+            overflow: visible;
+        }
+
+        #successHistory,
+        #failedHistory {
+            height: 26rem;
+            max-height: 26rem;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 0.35rem;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            min-height: 0;
         }
 
         .history-card .meta {
@@ -123,6 +171,14 @@
             padding: 0.75rem;
             color: #dfeee2;
             font-size: 0.9rem;
+        }
+
+        .history-card .header-pill {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            background: rgba(94, 240, 142, 0.12);
+            color: #9fdab2;
         }
 
         .offcanvas-dark {
@@ -229,6 +285,10 @@
         </div>
     </div>
 
+    <div class="status-bar" id="statusBar" role="status" aria-live="polite">
+        <div class="status-message" id="status"></div>
+    </div>
+
     <div class="offcanvas offcanvas-end offcanvas-dark" tabindex="-1" id="composerOffcanvas" aria-labelledby="composerOffcanvasLabel">
         <div class="offcanvas-header border-bottom border-success-subtle">
             <div>
@@ -265,7 +325,6 @@
             </div>
 
             <div id="validationSummary" class="status-message status-error mb-3" style="display:none;"></div>
-            <div id="status" class="status-message"></div>
 
             <div class="d-flex flex-wrap gap-2 mt-4">
                 <button type="button" class="btn btn-outline-success" id="sendBtn"><i class="fa-solid fa-paper-plane"></i> Send</button>
@@ -288,6 +347,7 @@
         const customHeadersDiv = document.getElementById('customHeaders');
         const validationSummary = document.getElementById('validationSummary');
         const statusDiv = document.getElementById('status');
+        const statusBar = document.getElementById('statusBar');
         const successHistoryDiv = document.getElementById('successHistory');
         const failedHistoryDiv = document.getElementById('failedHistory');
         const composerOffcanvas = document.getElementById('composerOffcanvas');
@@ -412,9 +472,17 @@
         }
 
         function setStatus(message, isError = false) {
-            statusDiv.className = 'status-message';
-            statusDiv.classList.add(isError ? 'status-error' : 'status-success');
+            const classes = ['status-message'];
+            classes.push(isError ? 'status-error' : 'status-success');
+            statusDiv.className = classes.join(' ');
             statusDiv.textContent = message;
+            statusBar.className = 'status-bar';
+            statusBar.classList.add(isError ? 'status-error' : 'status-success');
+            statusBar.setAttribute('title', message);
+            if (!statusBar.contains(statusDiv)) {
+                statusBar.innerHTML = '';
+                statusBar.appendChild(statusDiv);
+            }
         }
 
         function populateFormFromEntry(entry) {
@@ -455,42 +523,92 @@
             }
 
             const list = document.createElement('div');
-            list.className = 'd-grid gap-3';
+            list.className = 'd-grid gap-2 history-list';
+            list.id = `accordion-${label}`;
 
-            history.items.forEach(entry => {
+            history.items.forEach((entry, index) => {
                 const card = document.createElement('div');
                 card.className = 'history-card';
 
-                const meta = document.createElement('div');
-                meta.className = 'meta mb-2';
-                meta.textContent = `${new Date(entry.createdAtUtc || entry.createdAt || Date.now()).toLocaleString()} • ${entry.outcome || label}`;
+                const headerId = `history-header-${label}-${index}`;
+                const bodyId = `history-body-${label}-${index}`;
+                const request = entry.request || entry.Request || {};
+                const entityName = request.entityName || entry.entityName || 'default-queue';
+                const timestamp = new Date(entry.createdAtUtc || entry.createdAt || Date.now()).toLocaleString();
+                const statusLabel = entry.outcome || label;
 
-                const preview = document.createElement('pre');
-                preview.textContent = getHistoryBodyPreview(entry);
+                card.innerHTML = `
+                    <h2 class="accordion-header" id="${headerId}">
+                        <button class="accordion-button collapsed" type="button" aria-expanded="false" aria-controls="${bodyId}">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 w-100">
+                                <div class="small text-start">
+                                    <div class="fw-semibold">${timestamp}</div>
+                                    <div class="meta">${entityName}</div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="header-pill">${statusLabel}</span>
+                                </div>
+                            </div>
+                        </button>
+                    </h2>
+                    <div id="${bodyId}" class="accordion-collapse collapse" aria-labelledby="${headerId}">
+                        <div class="accordion-body">
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                <button type="button" class="btn btn-sm btn-outline-success" data-action="edit"><i class="fa-solid fa-pen"></i> Edit</button>
+                                <button type="button" class="btn btn-sm btn-outline-light" data-action="action"><i class="fa-solid fa-paper-plane"></i> ${actionLabel}</button>
+                            </div>
+                            <div class="mb-3">
+                                <div class="meta mb-1">Body</div>
+                                <pre>${getHistoryBodyPreview(entry)}</pre>
+                            </div>
+                            <div>
+                                <div class="meta mb-1">Headers</div>
+                                <pre>${JSON.stringify(entry.effectiveHeaders || entry.EffectiveHeaders || {}, null, 2)}</pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
 
-                const footer = document.createElement('div');
-                footer.className = 'd-flex flex-wrap gap-2 mt-3';
+                const button = card.querySelector('.accordion-button');
+                const panel = card.querySelector('.accordion-collapse');
 
-                const editBtn = document.createElement('button');
-                editBtn.type = 'button';
-                editBtn.className = 'btn btn-sm btn-outline-success';
-                editBtn.innerHTML = '<i class="fa-solid fa-pen"></i> Edit';
-                editBtn.addEventListener('click', () => {
+                button.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const isOpen = button.getAttribute('aria-expanded') === 'true';
+                    const siblingPanels = card.parentElement.querySelectorAll('.accordion-collapse');
+                    siblingPanels.forEach(sibling => {
+                        const siblingButton = sibling.previousElementSibling?.querySelector('.accordion-button');
+                        if (sibling !== panel) {
+                            sibling.classList.remove('show');
+                            siblingButton?.setAttribute('aria-expanded', 'false');
+                            siblingButton?.classList.add('collapsed');
+                        }
+                    });
+
+                    if (isOpen) {
+                        panel.classList.remove('show');
+                        button.setAttribute('aria-expanded', 'false');
+                        button.classList.add('collapsed');
+                    } else {
+                        panel.classList.add('show');
+                        button.setAttribute('aria-expanded', 'true');
+                        button.classList.remove('collapsed');
+                    }
+                });
+
+                card.querySelector('[data-action="edit"]').addEventListener('click', event => {
+                    event.stopPropagation();
                     populateFormFromEntry(entry);
                     setStatus(`Loaded history entry ${entry.id} into the form.`, false);
                 });
 
-                const actionBtn = document.createElement('button');
-                actionBtn.type = 'button';
-                actionBtn.className = 'btn btn-sm btn-outline-light';
-                actionBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> ${actionLabel}`;
-                actionBtn.addEventListener('click', () => {
-                    populateFormFromEntry(entry);
+                card.querySelector('[data-action="action"]').addEventListener('click', event => {
+                    event.stopPropagation();
                     actionHandler(entry);
                 });
 
-                footer.append(editBtn, actionBtn);
-                card.append(meta, preview, footer);
                 list.appendChild(card);
             });
 
@@ -507,11 +625,9 @@
                 const successData = await successResponse.json();
                 const failedData = await failedResponse.json();
                 renderHistory(successHistoryDiv, successData, 'success', 'Resend', async entry => {
-                    populateFormFromEntry(entry);
                     await resendEntry(entry);
                 });
                 renderHistory(failedHistoryDiv, failedData, 'failed', 'Repair & Resend', async entry => {
-                    populateFormFromEntry(entry);
                     await resendEntry(entry);
                 });
             } catch (err) {
@@ -590,6 +706,7 @@
 
                 if (response.ok) {
                     setStatus(`Sent to ${data.queue}. messageId=${data.messageId}`);
+                    offcanvas.hide();
                     timestampInput.value = new Date().toISOString();
                     validateForm();
                     await loadHistory();

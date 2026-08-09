@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AspireServiceBus.Sender.Tests;
 
@@ -33,6 +34,35 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
                 services.RemoveAll<ServiceBusClient>();
             });
         }).CreateClient();
+    }
+
+    [Fact]
+    public async Task UpdateOutcome_ByServiceBusMessageId_TransitionsHistoryToSuccess()
+    {
+        var historyFilePath = Path.Combine(Path.GetTempPath(), $"sender-history-{Guid.NewGuid():N}.ndjson");
+        var store = new FileMessageHistoryStore(historyFilePath, NullLogger<FileMessageHistoryStore>.Instance);
+
+        var initialEntry = new MessageHistoryEntry(
+            Id: Guid.NewGuid().ToString("N"),
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            QueueName: "default-queue",
+            Outcome: MessageHistoryOutcome.Processing,
+            FailureReason: null,
+            ServiceBusMessageId: "msg-123",
+            Request: new SendMessageRequest("2026-08-08T00:00:00Z", "default-queue", "receiver", "{\"message\":\"hello\"}", new Dictionary<string, string>()),
+            EffectiveHeaders: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            BodyJson: "{\"message\":\"hello\"}");
+
+        await store.AppendAsync(initialEntry, CancellationToken.None);
+        await store.UpdateOutcomeByServiceBusMessageIdAsync("msg-123", MessageHistoryOutcome.Success, cancellationToken: CancellationToken.None);
+
+        var successHistory = await store.GetByOutcomeAsync(MessageHistoryOutcome.Success, 20, 0, CancellationToken.None);
+        var failureHistory = await store.GetByOutcomeAsync(MessageHistoryOutcome.Failed, 20, 0, CancellationToken.None);
+
+        Assert.NotNull(successHistory);
+        Assert.Single(successHistory.Items);
+        Assert.Equal(MessageHistoryOutcome.Success, successHistory.Items[0].Outcome);
+        Assert.Empty(failureHistory.Items);
     }
 
     [Fact]

@@ -20,6 +20,7 @@ builder.AddProject<Projects.AspireServiceBus_Receiver>("receiver")
 	.WaitFor(serviceBus)
 	.WithEnvironment("AzureWebJobsStorage", "UseDevelopmentStorage=true")
 	.WithEnvironment("FUNCTIONS_WORKER_RUNTIME", "dotnet-isolated")
-	.WithEnvironment("ServiceBus__QueueName", "default-queue");
+	.WithEnvironment("ServiceBus__QueueName", "default-queue")
+	.WithEnvironment("SERVICEBUS_HISTORY_FILE", senderHistoryFilePath);
 
 builder.Build().Run();

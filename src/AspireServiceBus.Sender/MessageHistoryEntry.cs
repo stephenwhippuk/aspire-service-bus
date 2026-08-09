@@ -4,6 +4,7 @@ public static class MessageHistoryOutcome
 {
     public const string Success = "success";
     public const string Failed = "failed";
+    public const string Processing = "processing";
 }
 
 public sealed record MessageHistoryEntry(

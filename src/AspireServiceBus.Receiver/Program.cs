@@ -1,3 +1,5 @@
+using AspireServiceBus.Receiver;
+using AspireServiceBus.Sender;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,6 +26,17 @@ if (string.IsNullOrWhiteSpace(hostEndpoint) || hostEndpoint == "http://:")
                     options.TimestampFormat = "HH:mm:ss ";
                 });
             });
+
+            var historyFilePath = Environment.GetEnvironmentVariable("SERVICEBUS_HISTORY_FILE")
+                ?? Path.Combine(AppContext.BaseDirectory, "data", "message-history.ndjson");
+
+            services.AddSingleton<IMessageHistoryStore>(serviceProvider =>
+            {
+                var logger = serviceProvider.GetRequiredService<ILogger<FileMessageHistoryStore>>();
+                return new FileMessageHistoryStore(historyFilePath, logger);
+            });
+
+            services.AddHostedService<ServiceBusProcessingBackgroundService>();
         })
         .Build();
 
@@ -44,6 +57,17 @@ var host = new HostBuilder()
                 options.TimestampFormat = "HH:mm:ss ";
             });
         });
+
+        var historyFilePath = Environment.GetEnvironmentVariable("SERVICEBUS_HISTORY_FILE")
+            ?? Path.Combine(AppContext.BaseDirectory, "data", "message-history.ndjson");
+
+        services.AddSingleton<IMessageHistoryStore>(serviceProvider =>
+        {
+            var logger = serviceProvider.GetRequiredService<ILogger<FileMessageHistoryStore>>();
+            return new FileMessageHistoryStore(historyFilePath, logger);
+        });
+
+        services.AddHostedService<ServiceBusProcessingBackgroundService>();
     })
     .Build();
 

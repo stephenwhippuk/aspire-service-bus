@@ -21,4 +21,8 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.17.0" OutputItemType="Analyzer" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AspireServiceBus.Sender\AspireServiceBus.Sender.csproj" />
+  </ItemGroup>
 </Project>
