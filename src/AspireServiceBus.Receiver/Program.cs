@@ -17,26 +17,7 @@ if (string.IsNullOrWhiteSpace(hostEndpoint) || hostEndpoint == "http://:")
     var fallbackHost = Host.CreateDefaultBuilder(args)
         .ConfigureServices(services =>
         {
-            services.AddLogging(logging =>
-            {
-                logging.ClearProviders();
-                logging.AddSimpleConsole(options =>
-                {
-                    options.SingleLine = false;
-                    options.TimestampFormat = "HH:mm:ss ";
-                });
-            });
-
-            var historyFilePath = Environment.GetEnvironmentVariable("SERVICEBUS_HISTORY_FILE")
-                ?? Path.Combine(AppContext.BaseDirectory, "data", "message-history.ndjson");
-
-            services.AddSingleton<IMessageHistoryStore>(serviceProvider =>
-            {
-                var logger = serviceProvider.GetRequiredService<ILogger<FileMessageHistoryStore>>();
-                return new FileMessageHistoryStore(historyFilePath, logger);
-            });
-
-            services.AddHostedService<ServiceBusProcessingBackgroundService>();
+            services.AddReceiverServices(enableBackgroundProcessor: true);
         })
         .Build();
 
@@ -48,26 +29,7 @@ var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices(services =>
     {
-        services.AddLogging(logging =>
-        {
-            logging.ClearProviders();
-            logging.AddSimpleConsole(options =>
-            {
-                options.SingleLine = false;
-                options.TimestampFormat = "HH:mm:ss ";
-            });
-        });
-
-        var historyFilePath = Environment.GetEnvironmentVariable("SERVICEBUS_HISTORY_FILE")
-            ?? Path.Combine(AppContext.BaseDirectory, "data", "message-history.ndjson");
-
-        services.AddSingleton<IMessageHistoryStore>(serviceProvider =>
-        {
-            var logger = serviceProvider.GetRequiredService<ILogger<FileMessageHistoryStore>>();
-            return new FileMessageHistoryStore(historyFilePath, logger);
-        });
-
-        services.AddHostedService<ServiceBusProcessingBackgroundService>();
+        services.AddReceiverServices(enableBackgroundProcessor: false);
     })
     .Build();
 
