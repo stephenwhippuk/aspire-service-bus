@@ -1,5 +1,8 @@
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace AspireServiceBus.Receiver;
 
@@ -69,7 +72,7 @@ public class Worker : BackgroundService
                 var prettyPayload = JsonSerializer.Serialize(logPayload, PrettyJsonOptions);
 
                 _logger.LogInformation("Received message {MessageId} on queue {QueueName}", args.Message.MessageId, queueName);
-                _logger.LogInformation("Payload:{NewLine}{Payload}", Environment.NewLine, prettyPayload);
+                _logger.LogInformation("=== Received message payload === {Payload}", prettyPayload);
                 await AppendLocalLogAsync(prettyPayload, stoppingToken);
                 await args.CompleteMessageAsync(args.Message, stoppingToken);
             }

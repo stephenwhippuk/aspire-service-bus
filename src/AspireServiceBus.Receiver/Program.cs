@@ -1,24 +1,36 @@
 using AspireServiceBus.Receiver;
-using Azure.Messaging.ServiceBus;
+using AspireServiceBus.Sender;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-var builder = Host.CreateApplicationBuilder(args);
+var hostEndpoint = Environment.GetEnvironmentVariable("Functions__Worker__HostEndpoint")
+    ?? Environment.GetEnvironmentVariable("FUNCTIONS__WORKER__HOSTENDPOINT")
+    ?? Environment.GetEnvironmentVariable("Functions:Worker:HostEndpoint")
+    ?? Environment.GetEnvironmentVariable("FUNCTIONS_WORKER_HOST_ENDPOINT");
 
-builder.Logging.ClearProviders();
-builder.Logging.AddJsonConsole();
-
-var connectionString = builder.Configuration.GetConnectionString("servicebus")
-	?? builder.Configuration["ConnectionStrings__servicebus"];
-
-if (string.IsNullOrWhiteSpace(connectionString))
+if (string.IsNullOrWhiteSpace(hostEndpoint) || hostEndpoint == "http://:")
 {
-	builder.Services.AddSingleton<ServiceBusClient>(_ => null!);
-}
-else
-{
-	builder.Services.AddSingleton(new ServiceBusClient(connectionString));
+    Console.WriteLine("Azure Functions host endpoint is not available. The receiver will stay idle until it is started by the Functions host runtime.");
+
+    var fallbackHost = Host.CreateDefaultBuilder(args)
+        .ConfigureServices(services =>
+        {
+            services.AddReceiverServices(enableBackgroundProcessor: true);
+        })
+        .Build();
+
+    await fallbackHost.RunAsync();
+    return;
 }
 
-builder.Services.AddHostedService<Worker>();
+var host = new HostBuilder()
+    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureServices(services =>
+    {
+        services.AddReceiverServices(enableBackgroundProcessor: false);
+    })
+    .Build();
 
-var host = builder.Build();
 host.Run();

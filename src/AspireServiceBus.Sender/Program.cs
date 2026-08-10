@@ -5,7 +5,11 @@ using Microsoft.AspNetCore.Http.Json;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
-builder.Logging.AddJsonConsole();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.SingleLine = false;
+    options.TimestampFormat = "HH:mm:ss ";
+});
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -15,6 +19,15 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var queueName = builder.Configuration["ServiceBus:QueueName"] ?? "default-queue";
 var connectionString = ServiceBusConnectionSettings.ResolveConnectionString(builder.Configuration);
 var localLogPath = builder.Configuration["Logging:LocalFilePath"] ?? Environment.GetEnvironmentVariable("SERVICEBUS_LOG_FILE");
+var historyFilePath = builder.Configuration["History:FilePath"]
+    ?? Environment.GetEnvironmentVariable("SERVICEBUS_HISTORY_FILE")
+    ?? Path.Combine(AppContext.BaseDirectory, "data", "message-history.ndjson");
+
+builder.Services.AddSingleton<IMessageHistoryStore>(serviceProvider =>
+{
+    var logger = serviceProvider.GetRequiredService<ILogger<FileMessageHistoryStore>>();
+    return new FileMessageHistoryStore(historyFilePath, logger);
+});
 
 if (!string.IsNullOrWhiteSpace(connectionString))
 {

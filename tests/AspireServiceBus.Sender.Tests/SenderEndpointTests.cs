@@ -1,25 +1,163 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Reflection;
+using System.Text.Json;
 using Azure.Messaging.ServiceBus;
+using AspireServiceBus.Sender;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AspireServiceBus.Sender.Tests;
 
 public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient _client;
+    private readonly string _historyFilePath;
 
     public SenderEndpointTests(WebApplicationFactory<Program> factory)
     {
+        _historyFilePath = Path.Combine(Path.GetTempPath(), $"sender-history-{Guid.NewGuid():N}.ndjson");
+
         _client = factory.WithWebHostBuilder(builder =>
         {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["History:FilePath"] = _historyFilePath
+                });
+            });
+
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ServiceBusClient>();
             });
         }).CreateClient();
+    }
+
+    [Fact]
+    public async Task UpdateOutcome_ByServiceBusMessageId_TransitionsHistoryToSuccess()
+    {
+        var historyFilePath = Path.Combine(Path.GetTempPath(), $"sender-history-{Guid.NewGuid():N}.ndjson");
+        var store = new FileMessageHistoryStore(historyFilePath, NullLogger<FileMessageHistoryStore>.Instance);
+
+        var initialEntry = new MessageHistoryEntry(
+            Id: Guid.NewGuid().ToString("N"),
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            QueueName: "default-queue",
+            Outcome: MessageHistoryOutcome.Processing,
+            FailureReason: null,
+            ServiceBusMessageId: "msg-123",
+            Request: new SendMessageRequest("2026-08-08T00:00:00Z", "default-queue", "receiver", "{\"message\":\"hello\"}", new Dictionary<string, string>()),
+            EffectiveHeaders: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            BodyJson: "{\"message\":\"hello\"}");
+
+        await store.AppendAsync(initialEntry, CancellationToken.None);
+        await store.UpdateOutcomeByServiceBusMessageIdAsync("msg-123", MessageHistoryOutcome.Success, cancellationToken: CancellationToken.None);
+
+        var successHistory = await store.GetByOutcomeAsync(MessageHistoryOutcome.Success, 20, 0, CancellationToken.None);
+        var failureHistory = await store.GetByOutcomeAsync(MessageHistoryOutcome.Failed, 20, 0, CancellationToken.None);
+
+        Assert.NotNull(successHistory);
+        Assert.Single(successHistory.Items);
+        Assert.Equal(MessageHistoryOutcome.Success, successHistory.Items[0].Outcome);
+        Assert.Empty(failureHistory.Items);
+    }
+
+    [Fact]
+    public async Task PurgeByOutcome_DoesNotLoseEntriesAppendedDuringPurge()
+    {
+        var historyFilePath = Path.Combine(Path.GetTempPath(), $"sender-history-{Guid.NewGuid():N}.ndjson");
+        var store = new FileMessageHistoryStore(historyFilePath, NullLogger<FileMessageHistoryStore>.Instance);
+
+        var successEntry = new MessageHistoryEntry(
+            Id: Guid.NewGuid().ToString("N"),
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            QueueName: "default-queue",
+            Outcome: MessageHistoryOutcome.Success,
+            FailureReason: null,
+            ServiceBusMessageId: null,
+            Request: new SendMessageRequest("2026-08-08T00:00:00Z", "default-queue", "receiver", "{\"message\":\"success\"}", new Dictionary<string, string>()),
+            EffectiveHeaders: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            BodyJson: "{\"message\":\"success\"}");
+
+        await File.WriteAllTextAsync(historyFilePath, JsonSerializer.Serialize(successEntry) + Environment.NewLine);
+
+        var appendedEntry = new MessageHistoryEntry(
+            Id: Guid.NewGuid().ToString("N"),
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            QueueName: "default-queue",
+            Outcome: MessageHistoryOutcome.Failed,
+            FailureReason: "appended-during-purge",
+            ServiceBusMessageId: null,
+            Request: new SendMessageRequest("2026-08-08T00:00:00Z", "default-queue", "receiver", "{\"message\":\"appended\"}", new Dictionary<string, string>()),
+            EffectiveHeaders: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            BodyJson: "{\"message\":\"appended\"}");
+
+        var fileLockField = typeof(FileMessageHistoryStore).GetField("FileLock", BindingFlags.NonPublic | BindingFlags.Static);
+        var fileLock = (SemaphoreSlim?)fileLockField?.GetValue(null);
+
+        Assert.NotNull(fileLock);
+
+        await fileLock!.WaitAsync(CancellationToken.None);
+        try
+        {
+            var appendTask = store.AppendAsync(appendedEntry, CancellationToken.None);
+            var purgeTask = store.PurgeByOutcomeAsync(MessageHistoryOutcome.Success, CancellationToken.None);
+
+            await Task.Yield();
+            fileLock.Release();
+
+            await Task.WhenAll(appendTask, purgeTask);
+        }
+        finally
+        {
+            if (fileLock.CurrentCount == 0)
+            {
+                fileLock.Release();
+            }
+        }
+
+        var remainingLines = await File.ReadAllLinesAsync(historyFilePath);
+        var remainingEntries = remainingLines
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => JsonSerializer.Deserialize<MessageHistoryEntry>(line))
+            .Where(entry => entry is not null)
+            .Select(entry => entry!)
+            .ToList();
+
+        Assert.DoesNotContain(remainingEntries, entry => entry.Outcome == MessageHistoryOutcome.Success);
+        Assert.Contains(remainingEntries, entry => entry.Id == appendedEntry.Id);
+    }
+
+    [Fact]
+    public async Task History_Endpoints_DefaultToPageSize_WhenQueryParamsOmitted()
+    {
+        await _client.PostAsJsonAsync("/send", new
+        {
+            timestamp = "2026-08-08T00:00:00Z",
+            entityName = "default-queue",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"hello\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "abc" }
+        });
+
+        var successHistoryResponse = await _client.GetAsync("/history/success");
+        successHistoryResponse.EnsureSuccessStatusCode();
+
+        var successHistory = await successHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(successHistory);
+        Assert.Empty(successHistory!.Items);
+
+        var failedHistoryResponse = await _client.GetAsync("/history/failed");
+        failedHistoryResponse.EnsureSuccessStatusCode();
+
+        var failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(failedHistory);
+        Assert.NotEmpty(failedHistory!.Items);
     }
 
     [Fact]
@@ -40,5 +178,118 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         Assert.NotNull(payload);
         Assert.Equal("Service Bus connection is not available yet. The service will stay running and retry once the emulator connection is configured.", payload!["error"]);
+    }
+
+    [Fact]
+    public async Task Send_Failure_IsCapturedInFailedHistory()
+    {
+        await _client.PostAsJsonAsync("/send", new
+        {
+            timestamp = "2026-08-08T00:00:00Z",
+            entityName = "default-queue",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"hello\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "abc" }
+        });
+
+        var failedHistoryResponse = await _client.GetAsync("/history/failed?take=20&skip=0");
+        failedHistoryResponse.EnsureSuccessStatusCode();
+
+        var failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+
+        Assert.NotNull(failedHistory);
+        Assert.NotEmpty(failedHistory!.Items);
+        Assert.All(failedHistory.Items, item => Assert.Equal(MessageHistoryOutcome.Failed, item.Outcome));
+    }
+
+    [Fact]
+    public async Task FailedHistory_DoesNotLeakIntoSuccessHistory()
+    {
+        await _client.PostAsJsonAsync("/send", new
+        {
+            timestamp = "2026-08-08T00:00:00Z",
+            entityName = "default-queue",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"hello\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "abc" }
+        });
+
+        var successHistoryResponse = await _client.GetAsync("/history/success?take=20&skip=0");
+        successHistoryResponse.EnsureSuccessStatusCode();
+
+        var successHistory = await successHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+
+        Assert.NotNull(successHistory);
+        Assert.Empty(successHistory!.Items);
+    }
+
+    [Fact]
+    public async Task PurgeSucceededHistory_RemovesOnlySuccessEntries()
+    {
+        await _client.PostAsJsonAsync("/send", new
+        {
+            timestamp = "2026-08-08T00:00:00Z",
+            entityName = "default-queue",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"hello\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "abc" }
+        });
+
+        var purgeResponse = await _client.DeleteAsync("/history/success");
+        purgeResponse.EnsureSuccessStatusCode();
+
+        var successHistoryResponse = await _client.GetAsync("/history/success?take=20&skip=0");
+        successHistoryResponse.EnsureSuccessStatusCode();
+
+        var successHistory = await successHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(successHistory);
+        Assert.Empty(successHistory!.Items);
+
+        var failedHistoryResponse = await _client.GetAsync("/history/failed?take=20&skip=0");
+        failedHistoryResponse.EnsureSuccessStatusCode();
+
+        var failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(failedHistory);
+        Assert.NotEmpty(failedHistory!.Items);
+    }
+
+    [Fact]
+    public async Task Resend_WithRepairPayload_CreatesLinkedHistoryEntry()
+    {
+        await _client.PostAsJsonAsync("/send", new
+        {
+            timestamp = "2026-08-08T00:00:00Z",
+            entityName = "default-queue",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"hello\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "abc" }
+        });
+
+        var failedHistoryResponse = await _client.GetAsync("/history/failed?take=20&skip=0");
+        failedHistoryResponse.EnsureSuccessStatusCode();
+
+        var failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(failedHistory);
+        Assert.NotEmpty(failedHistory!.Items);
+
+        var source = failedHistory.Items[0];
+        var resendResponse = await _client.PostAsJsonAsync($"/history/{source.Id}/resend", new
+        {
+            timestamp = "2026-08-09T00:00:00Z",
+            entityName = "default-queue",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"repaired\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "repaired" }
+        });
+
+        Assert.True(resendResponse.StatusCode is HttpStatusCode.OK or HttpStatusCode.ServiceUnavailable);
+
+        failedHistoryResponse = await _client.GetAsync("/history/failed?take=20&skip=0");
+        failedHistoryResponse.EnsureSuccessStatusCode();
+
+        failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(failedHistory);
+        Assert.True(failedHistory!.Items.Count >= 2);
+        Assert.Contains(failedHistory.Items, item => item.SourceAttemptId == source.Id);
     }
 }
