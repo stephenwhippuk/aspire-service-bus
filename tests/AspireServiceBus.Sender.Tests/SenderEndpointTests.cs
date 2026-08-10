@@ -66,6 +66,33 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task History_Endpoints_DefaultToPageSize_WhenQueryParamsOmitted()
+    {
+        await _client.PostAsJsonAsync("/send", new
+        {
+            timestamp = "2026-08-08T00:00:00Z",
+            entityName = "default-queue",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"hello\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "abc" }
+        });
+
+        var successHistoryResponse = await _client.GetAsync("/history/success");
+        successHistoryResponse.EnsureSuccessStatusCode();
+
+        var successHistory = await successHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(successHistory);
+        Assert.Empty(successHistory!.Items);
+
+        var failedHistoryResponse = await _client.GetAsync("/history/failed");
+        failedHistoryResponse.EnsureSuccessStatusCode();
+
+        var failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(failedHistory);
+        Assert.NotEmpty(failedHistory!.Items);
+    }
+
+    [Fact]
     public async Task Send_Returns503_WhenServiceBusClientIsUnavailable()
     {
         var response = await _client.PostAsJsonAsync("/send", new

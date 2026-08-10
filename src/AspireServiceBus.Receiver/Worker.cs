@@ -72,8 +72,7 @@ public class Worker : BackgroundService
                 var prettyPayload = JsonSerializer.Serialize(logPayload, PrettyJsonOptions);
 
                 _logger.LogInformation("Received message {MessageId} on queue {QueueName}", args.Message.MessageId, queueName);
-                _logger.LogInformation("=== Received message payload ===");
-                _logger.LogInformation(prettyPayload);
+                _logger.LogInformation("=== Received message payload === {Payload}", prettyPayload);
                 await AppendLocalLogAsync(prettyPayload, stoppingToken);
                 await args.CompleteMessageAsync(args.Message, stoppingToken);
             }

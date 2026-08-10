@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
+using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Extensions.Options;
 
 namespace AspireServiceBus.Sender;
 
@@ -7,30 +9,45 @@ public static class SenderEndpoints
 {
     private static readonly SemaphoreSlim LogWriteLock = new(1, 1);
 
+    private sealed class JsonHttpResult(object? value, int statusCode) : IResult
+    {
+        public async Task ExecuteAsync(HttpContext httpContext)
+        {
+            var options = httpContext.RequestServices.GetService<IOptions<JsonOptions>>();
+            var serializerOptions = options?.Value.SerializerOptions ?? new JsonOptions().SerializerOptions;
+
+            httpContext.Response.StatusCode = statusCode;
+            httpContext.Response.ContentType = "application/json; charset=utf-8";
+
+            var payload = JsonSerializer.SerializeToUtf8Bytes(value, serializerOptions);
+            await httpContext.Response.Body.WriteAsync(payload, httpContext.RequestAborted);
+        }
+    }
+
     public static IEndpointRouteBuilder MapSenderEndpoints(this IEndpointRouteBuilder app, string queueName, string? localLogPath)
     {
-        app.MapGet("/history/success", async (IMessageHistoryStore historyStore, int take, int skip, CancellationToken cancellationToken) =>
+        app.MapGet("/history/success", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken, int take = 20, int skip = 0) =>
         {
             var history = await historyStore.GetByOutcomeAsync(MessageHistoryOutcome.Success, take == 0 ? 50 : take, skip, cancellationToken);
-            return Results.Ok(history);
+            return new JsonHttpResult(history, StatusCodes.Status200OK);
         });
 
-        app.MapGet("/history/failed", async (IMessageHistoryStore historyStore, int take, int skip, CancellationToken cancellationToken) =>
+        app.MapGet("/history/failed", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken, int take = 20, int skip = 0) =>
         {
             var history = await historyStore.GetByOutcomeAsync(MessageHistoryOutcome.Failed, take == 0 ? 50 : take, skip, cancellationToken);
-            return Results.Ok(history);
+            return new JsonHttpResult(history, StatusCodes.Status200OK);
         });
 
         app.MapDelete("/history/success", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken) =>
         {
             await historyStore.PurgeByOutcomeAsync(MessageHistoryOutcome.Success, cancellationToken);
-            return Results.Ok(new { status = "purged", outcome = MessageHistoryOutcome.Success });
+            return new JsonHttpResult(new { status = "purged", outcome = MessageHistoryOutcome.Success }, StatusCodes.Status200OK);
         });
 
         app.MapDelete("/history/failed", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken) =>
         {
             await historyStore.PurgeByOutcomeAsync(MessageHistoryOutcome.Failed, cancellationToken);
-            return Results.Ok(new { status = "purged", outcome = MessageHistoryOutcome.Failed });
+            return new JsonHttpResult(new { status = "purged", outcome = MessageHistoryOutcome.Failed }, StatusCodes.Status200OK);
         });
 
         app.MapPost("/send", async (HttpContext httpContext, SendMessageRequest request, CancellationToken cancellationToken) =>
@@ -52,7 +69,7 @@ public static class SenderEndpoints
             var existingEntry = await historyStore.GetByIdAsync(id, cancellationToken);
             if (existingEntry is null)
             {
-                return Results.NotFound(new { error = "History entry not found." });
+                return new JsonHttpResult(new { error = "History entry not found." }, StatusCodes.Status404NotFound);
             }
 
             var resendRequest = CreateSendRequestFromHistory(existingEntry, request);
@@ -86,7 +103,7 @@ public static class SenderEndpoints
                 failureReason: validationError,
                 sourceAttemptId: sourceAttemptId), cancellationToken);
 
-            return Results.BadRequest(new { error = validationError });
+            return new JsonHttpResult(new { error = validationError }, StatusCodes.Status400BadRequest);
         }
 
         if (client is null)
@@ -111,7 +128,7 @@ public static class SenderEndpoints
                 error = unavailableMessage
             }, cancellationToken);
 
-            return Results.Json(new { error = unavailableMessage }, statusCode: 503);
+            return new JsonHttpResult(new { error = unavailableMessage }, StatusCodes.Status503ServiceUnavailable);
         }
 
         try
@@ -160,7 +177,7 @@ public static class SenderEndpoints
                 headers = message.ApplicationProperties
             }, cancellationToken);
 
-            return Results.Json(new { status = "processing", queue = queueName, messageId = message.MessageId }, statusCode: StatusCodes.Status202Accepted);
+            return new JsonHttpResult(new { status = "processing", queue = queueName, messageId = message.MessageId }, StatusCodes.Status202Accepted);
         }
         catch (ServiceBusException ex) when (IsTransientServiceBusFailure(ex))
         {
@@ -184,9 +201,9 @@ public static class SenderEndpoints
                 error = transientFailureMessage
             }, cancellationToken);
 
-            return Results.Json(
+            return new JsonHttpResult(
                 new { error = transientFailureMessage },
-                statusCode: 503);
+                StatusCodes.Status503ServiceUnavailable);
         }
         catch (Exception ex)
         {
@@ -213,7 +230,7 @@ public static class SenderEndpoints
                 exception = ex.ToString()
             }, cancellationToken);
 
-            return Results.Json(new { error = clientErrorMessage }, statusCode: 500);
+            return new JsonHttpResult(new { error = clientErrorMessage }, StatusCodes.Status500InternalServerError);
         }
     }
 

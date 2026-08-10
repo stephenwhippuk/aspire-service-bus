@@ -51,11 +51,73 @@
             color: #9fdab2;
             border-radius: 999px;
             padding: 0.55rem 0.95rem;
+            transition: all 0.2s ease;
+            background: rgba(255, 255, 255, 0.04);
         }
 
         .nav-pills .nav-link.active {
-            background-color: #1d5f33;
             color: white;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .nav-pills .nav-link[data-bs-target="#pendingPane"] {
+            background: rgba(96, 165, 250, 0.12);
+            color: #bfdbfe;
+            border: 1px solid rgba(96, 165, 250, 0.25);
+        }
+
+        .nav-pills .nav-link[data-bs-target="#pendingPane"].active {
+            background: linear-gradient(135deg, #2563eb, #60a5fa);
+            color: #f8fbff;
+            font-weight: 700;
+        }
+
+        .nav-pills .nav-link[data-bs-target="#processingPane"] {
+            background: rgba(250, 204, 21, 0.12);
+            color: #fde68a;
+            border: 1px solid rgba(250, 204, 21, 0.25);
+        }
+
+        .nav-pills .nav-link[data-bs-target="#processingPane"].active {
+            background: linear-gradient(135deg, #b45309, #facc15);
+            color: #3a2200;
+            font-weight: 700;
+        }
+
+        .nav-pills .nav-link[data-bs-target="#successPane"] {
+            background: rgba(74, 222, 128, 0.12);
+            color: #bbf7d0;
+            border: 1px solid rgba(74, 222, 128, 0.25);
+        }
+
+        .nav-pills .nav-link[data-bs-target="#successPane"].active {
+            background: linear-gradient(135deg, #15803d, #4ade80);
+            color: #052e16;
+            font-weight: 700;
+        }
+
+        .nav-pills .nav-link[data-bs-target="#failedPane"] {
+            background: rgba(251, 113, 133, 0.12);
+            color: #fecdd3;
+            border: 1px solid rgba(251, 113, 133, 0.25);
+        }
+
+        .nav-pills .nav-link[data-bs-target="#failedPane"].active {
+            background: linear-gradient(135deg, #dc2626, #fb923c);
+            color: #2b0b0b;
+            font-weight: 700;
+        }
+
+        .nav-pills .nav-link[data-bs-target="#receivedPane"] {
+            background: rgba(167, 139, 250, 0.12);
+            color: #e9d5ff;
+            border: 1px solid rgba(167, 139, 250, 0.25);
+        }
+
+        .nav-pills .nav-link[data-bs-target="#receivedPane"].active {
+            background: linear-gradient(135deg, #7c3aed, #c084fc);
+            color: #2d104f;
+            font-weight: 700;
         }
 
         .btn-outline-success {
@@ -116,6 +178,51 @@
             background: rgba(9, 24, 14, 0.65);
         }
 
+        .tab-pane-title-pending {
+            color: #bfdbfe;
+        }
+
+        .tab-pane-title-processing {
+            color: #fde68a;
+        }
+
+        .tab-pane-title-success {
+            color: #bbf7d0;
+        }
+
+        .tab-pane-title-failed {
+            color: #fecdd3;
+        }
+
+        .tab-pane-title-received {
+            color: #e9d5ff;
+        }
+
+        .tab-theme-pending {
+            border-color: rgba(96, 165, 250, 0.35);
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 64, 175, 0.28));
+        }
+
+        .tab-theme-processing {
+            border-color: rgba(250, 204, 21, 0.35);
+            background: linear-gradient(135deg, rgba(39, 24, 8, 0.92), rgba(180, 83, 9, 0.28));
+        }
+
+        .tab-theme-success {
+            border-color: rgba(94, 240, 142, 0.35);
+            background: linear-gradient(135deg, rgba(5, 24, 14, 0.92), rgba(34, 197, 94, 0.24));
+        }
+
+        .tab-theme-failed {
+            border-color: rgba(251, 113, 133, 0.35);
+            background: linear-gradient(135deg, rgba(30, 10, 10, 0.92), rgba(239, 68, 68, 0.24));
+        }
+
+        .tab-theme-received {
+            border-color: rgba(167, 139, 250, 0.35);
+            background: linear-gradient(135deg, rgba(24, 16, 44, 0.92), rgba(139, 92, 246, 0.24));
+        }
+
         .history-card {
             border: 1px solid rgba(94, 240, 142, 0.2);
             border-radius: 1rem;
@@ -142,10 +249,26 @@
             overflow: visible;
         }
 
+        .tab-content {
+            min-height: 30rem;
+        }
+
+        .tab-pane {
+            height: 100%;
+        }
+
+        .tab-pane > .placeholder-card {
+            min-height: 26rem;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
         #successHistory,
         #failedHistory {
-            height: 26rem;
-            max-height: 26rem;
+            flex: 1 1 auto;
+            min-height: 0;
+            height: 100%;
             overflow-y: auto;
             overflow-x: hidden;
             padding-right: 0.35rem;
@@ -181,6 +304,36 @@
             color: #9fdab2;
         }
 
+        .demo-context-title {
+            color: #f8fbff;
+            letter-spacing: 0.02em;
+        }
+
+        .demo-context-status {
+            background: linear-gradient(135deg, rgba(94, 240, 142, 0.18), rgba(37, 99, 235, 0.18));
+            border: 1px solid rgba(94, 240, 142, 0.28);
+            color: #dffbe8;
+        }
+
+        .demo-context-status .badge {
+            background: rgba(94, 240, 142, 0.2) !important;
+            color: #f0fff4 !important;
+            border: 1px solid rgba(94, 240, 142, 0.35);
+        }
+
+        .demo-context-list li {
+            color: #eaf8ee;
+            font-weight: 600;
+            line-height: 1.6;
+        }
+
+        .demo-context-list .fa-solid,
+        .demo-context-list .fa-bolt,
+        .demo-context-list .fa-microchip,
+        .demo-context-list .fa-shield-halved {
+            color: #7ee7a7;
+        }
+
         .offcanvas-dark {
             background: #040806;
             color: #f3f8f2;
@@ -210,15 +363,15 @@
             <div class="col-lg-4">
                 <div class="card glass-card h-100">
                     <div class="card-body">
-                        <h2 class="h5 fw-semibold mb-3"><i class="fa-solid fa-layer-group brand-accent"></i> Demo context</h2>
-                        <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background: rgba(94, 240, 142, 0.08);">
-                            <span class="muted">Queue state</span>
-                            <span class="badge bg-success-subtle text-success-emphasis">Live</span>
+                        <h2 class="h5 fw-semibold mb-3 demo-context-title"><i class="fa-solid fa-layer-group brand-accent"></i> Demo context</h2>
+                        <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded demo-context-status">
+                            <span class="fw-semibold">Queue state</span>
+                            <span class="badge">Live</span>
                         </div>
-                        <ul class="list-unstyled small mb-0">
-                            <li class="mb-2"><i class="fa-solid fa-bolt brand-accent"></i> Sender remains the focus of the demo.</li>
-                            <li class="mb-2"><i class="fa-solid fa-microchip brand-accent"></i> Durable function remains a contextual placeholder.</li>
-                            <li><i class="fa-solid fa-shield-halved brand-accent"></i> Success and failed history are now visible in the workflow view.</li>
+                        <ul class="list-unstyled small mb-0 demo-context-list">
+                            <li class="mb-2"><i class="fa-solid fa-bolt"></i> Sender remains the focus of the demo.</li>
+                            <li class="mb-2"><i class="fa-solid fa-microchip"></i> Durable function remains a contextual placeholder.</li>
+                            <li><i class="fa-solid fa-shield-halved"></i> Success and failed history are now visible in the workflow view.</li>
                         </ul>
                     </div>
                 </div>
@@ -247,34 +400,38 @@
 
                         <div class="tab-content">
                             <div class="tab-pane fade show active" id="pendingPane">
-                                <div class="placeholder-card">
-                                    <h3 class="h6 fw-semibold mb-2"><i class="fa-regular fa-clock brand-accent"></i> Pending</h3>
+                                <div class="placeholder-card tab-theme-pending">
+                                    <h3 class="h6 fw-semibold mb-2 tab-pane-title-pending"><i class="fa-regular fa-clock"></i> Pending</h3>
                                     <p class="mb-0 muted">This view will be wired up later. For now the placeholder stays in the same visual language as the rest of the experience.</p>
                                 </div>
                             </div>
                             <div class="tab-pane fade" id="processingPane">
-                                <div class="placeholder-card">
-                                    <h3 class="h6 fw-semibold mb-2"><i class="fa-solid fa-spinner brand-accent"></i> Processing</h3>
+                                <div class="placeholder-card tab-theme-processing">
+                                    <h3 class="h6 fw-semibold mb-2 tab-pane-title-processing"><i class="fa-solid fa-spinner"></i> Processing</h3>
                                     <p class="mb-0 muted">This view will be wired up later. For now the placeholder stays in the same visual language as the rest of the experience.</p>
                                 </div>
                             </div>
                             <div class="tab-pane fade" id="successPane">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h3 class="h6 fw-semibold mb-0"><i class="fa-solid fa-circle-check brand-accent"></i> Success history</h3>
-                                    <button type="button" class="btn btn-sm btn-outline-success" id="purgeSuccessBtn"><i class="fa-solid fa-broom"></i> Purge</button>
+                                <div class="placeholder-card tab-theme-success mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-3 history-header-row">
+                                        <h3 class="h6 fw-semibold mb-0 tab-pane-title-success"><i class="fa-solid fa-circle-check"></i> Success history</h3>
+                                        <button type="button" class="btn btn-sm btn-outline-success" id="purgeSuccessBtn"><i class="fa-solid fa-broom"></i> Purge</button>
+                                    </div>
+                                    <div id="successHistory"></div>
                                 </div>
-                                <div id="successHistory"></div>
                             </div>
                             <div class="tab-pane fade" id="failedPane">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h3 class="h6 fw-semibold mb-0"><i class="fa-solid fa-triangle-exclamation brand-accent"></i> Failed history</h3>
-                                    <button type="button" class="btn btn-sm btn-outline-success" id="purgeFailedBtn"><i class="fa-solid fa-broom"></i> Purge</button>
+                                <div class="placeholder-card tab-theme-failed mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-3 history-header-row">
+                                        <h3 class="h6 fw-semibold mb-0 tab-pane-title-failed"><i class="fa-solid fa-triangle-exclamation"></i> Failed history</h3>
+                                        <button type="button" class="btn btn-sm btn-outline-success" id="purgeFailedBtn"><i class="fa-solid fa-broom"></i> Purge</button>
+                                    </div>
+                                    <div id="failedHistory"></div>
                                 </div>
-                                <div id="failedHistory"></div>
                             </div>
                             <div class="tab-pane fade" id="receivedPane">
-                                <div class="placeholder-card">
-                                    <h3 class="h6 fw-semibold mb-2"><i class="fa-solid fa-envelope-open-text brand-accent"></i> Received</h3>
+                                <div class="placeholder-card tab-theme-received">
+                                    <h3 class="h6 fw-semibold mb-2 tab-pane-title-received"><i class="fa-solid fa-envelope-open-text"></i> Received</h3>
                                     <p class="mb-0 muted">This view will be wired up later. For now the placeholder stays in the same visual language as the rest of the experience.</p>
                                 </div>
                             </div>
@@ -471,6 +628,22 @@
             };
         }
 
+        function buildResendPayload(entry) {
+            const request = entry.request || entry.Request || {};
+            const effectiveHeaders = entry.effectiveHeaders || entry.EffectiveHeaders || {};
+            const customHeaders = Object.fromEntries(
+                Object.entries(effectiveHeaders).filter(([key]) => !['timestamp', 'entity-name', 'target-application'].includes(key.toLowerCase()))
+            );
+
+            return {
+                timestamp: request.timestamp || entry.timestamp || new Date().toISOString(),
+                entityName: request.entityName || entry.entityName || 'default-queue',
+                targetApplication: request.targetApplication || entry.targetApplication || 'receiver',
+                bodyJson: request.bodyJson || entry.bodyJson || '{\n    "message": "hello"\n}',
+                customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : undefined
+            };
+        }
+
         function setStatus(message, isError = false) {
             const classes = ['status-message'];
             classes.push(isError ? 'status-error' : 'status-success');
@@ -636,12 +809,7 @@
         }
 
         async function resendEntry(entry) {
-            if (!validateForm()) {
-                setStatus('Please fix the validation errors before resending.', true);
-                return;
-            }
-
-            const payload = buildPayload();
+            const payload = buildResendPayload(entry);
             try {
                 const response = await fetch(`/history/${entry.id}/resend`, {
                     method: 'POST',
