@@ -127,47 +127,47 @@ public sealed class FileMessageHistoryStore : IMessageHistoryStore
 
     public async Task PurgeByOutcomeAsync(string outcome, CancellationToken cancellationToken)
     {
-        if (!File.Exists(_historyFilePath))
-        {
-            return;
-        }
-
-        var normalizedOutcome = NormalizeOutcome(outcome);
-        var lines = await File.ReadAllLinesAsync(_historyFilePath, cancellationToken);
-        var remainingLines = new List<string>(lines.Length);
-
-        foreach (var line in lines)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            try
-            {
-                var entry = JsonSerializer.Deserialize<MessageHistoryEntry>(line, SerializerOptions);
-                if (entry is null)
-                {
-                    remainingLines.Add(line);
-                    continue;
-                }
-
-                if (NormalizeOutcome(entry.Outcome) == normalizedOutcome)
-                {
-                    continue;
-                }
-
-                remainingLines.Add(line);
-            }
-            catch (JsonException)
-            {
-                remainingLines.Add(line);
-            }
-        }
-
         await FileLock.WaitAsync(cancellationToken);
         try
         {
+            if (!File.Exists(_historyFilePath))
+            {
+                return;
+            }
+
+            var normalizedOutcome = NormalizeOutcome(outcome);
+            var lines = await File.ReadAllLinesAsync(_historyFilePath, cancellationToken);
+            var remainingLines = new List<string>(lines.Length);
+
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var entry = JsonSerializer.Deserialize<MessageHistoryEntry>(line, SerializerOptions);
+                    if (entry is null)
+                    {
+                        remainingLines.Add(line);
+                        continue;
+                    }
+
+                    if (NormalizeOutcome(entry.Outcome) == normalizedOutcome)
+                    {
+                        continue;
+                    }
+
+                    remainingLines.Add(line);
+                }
+                catch (JsonException)
+                {
+                    remainingLines.Add(line);
+                }
+            }
+
             await File.WriteAllLinesAsync(_historyFilePath, remainingLines, cancellationToken);
         }
         finally

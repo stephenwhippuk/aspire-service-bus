@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Reflection;
+using System.Text.Json;
 using Azure.Messaging.ServiceBus;
 using AspireServiceBus.Sender;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -63,6 +65,72 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Single(successHistory.Items);
         Assert.Equal(MessageHistoryOutcome.Success, successHistory.Items[0].Outcome);
         Assert.Empty(failureHistory.Items);
+    }
+
+    [Fact]
+    public async Task PurgeByOutcome_DoesNotLoseEntriesAppendedDuringPurge()
+    {
+        var historyFilePath = Path.Combine(Path.GetTempPath(), $"sender-history-{Guid.NewGuid():N}.ndjson");
+        var store = new FileMessageHistoryStore(historyFilePath, NullLogger<FileMessageHistoryStore>.Instance);
+
+        var successEntry = new MessageHistoryEntry(
+            Id: Guid.NewGuid().ToString("N"),
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            QueueName: "default-queue",
+            Outcome: MessageHistoryOutcome.Success,
+            FailureReason: null,
+            ServiceBusMessageId: null,
+            Request: new SendMessageRequest("2026-08-08T00:00:00Z", "default-queue", "receiver", "{\"message\":\"success\"}", new Dictionary<string, string>()),
+            EffectiveHeaders: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            BodyJson: "{\"message\":\"success\"}");
+
+        await File.WriteAllTextAsync(historyFilePath, JsonSerializer.Serialize(successEntry) + Environment.NewLine);
+
+        var appendedEntry = new MessageHistoryEntry(
+            Id: Guid.NewGuid().ToString("N"),
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            QueueName: "default-queue",
+            Outcome: MessageHistoryOutcome.Failed,
+            FailureReason: "appended-during-purge",
+            ServiceBusMessageId: null,
+            Request: new SendMessageRequest("2026-08-08T00:00:00Z", "default-queue", "receiver", "{\"message\":\"appended\"}", new Dictionary<string, string>()),
+            EffectiveHeaders: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            BodyJson: "{\"message\":\"appended\"}");
+
+        var fileLockField = typeof(FileMessageHistoryStore).GetField("FileLock", BindingFlags.NonPublic | BindingFlags.Static);
+        var fileLock = (SemaphoreSlim?)fileLockField?.GetValue(null);
+
+        Assert.NotNull(fileLock);
+
+        await fileLock!.WaitAsync(CancellationToken.None);
+        try
+        {
+            var appendTask = store.AppendAsync(appendedEntry, CancellationToken.None);
+            var purgeTask = store.PurgeByOutcomeAsync(MessageHistoryOutcome.Success, CancellationToken.None);
+
+            await Task.Yield();
+            fileLock.Release();
+
+            await Task.WhenAll(appendTask, purgeTask);
+        }
+        finally
+        {
+            if (fileLock.CurrentCount == 0)
+            {
+                fileLock.Release();
+            }
+        }
+
+        var remainingLines = await File.ReadAllLinesAsync(historyFilePath);
+        var remainingEntries = remainingLines
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => JsonSerializer.Deserialize<MessageHistoryEntry>(line))
+            .Where(entry => entry is not null)
+            .Select(entry => entry!)
+            .ToList();
+
+        Assert.DoesNotContain(remainingEntries, entry => entry.Outcome == MessageHistoryOutcome.Success);
+        Assert.Contains(remainingEntries, entry => entry.Id == appendedEntry.Id);
     }
 
     [Fact]
