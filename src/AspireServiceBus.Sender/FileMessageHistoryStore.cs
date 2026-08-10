@@ -178,58 +178,58 @@ public sealed class FileMessageHistoryStore : IMessageHistoryStore
 
     public async Task UpdateOutcomeByServiceBusMessageIdAsync(string serviceBusMessageId, string outcome, string? failureReason = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(serviceBusMessageId) || !File.Exists(_historyFilePath))
-        {
-            return;
-        }
-
-        var lines = await File.ReadAllLinesAsync(_historyFilePath, cancellationToken);
-        var changed = false;
-
-        for (var index = 0; index < lines.Length; index++)
-        {
-            var line = lines[index];
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            try
-            {
-                var entry = JsonSerializer.Deserialize<MessageHistoryEntry>(line, SerializerOptions);
-                if (entry is null)
-                {
-                    continue;
-                }
-
-                if (!string.Equals(entry.ServiceBusMessageId, serviceBusMessageId, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var updatedEntry = entry with
-                {
-                    Outcome = outcome,
-                    FailureReason = failureReason
-                };
-
-                lines[index] = JsonSerializer.Serialize(updatedEntry, SerializerOptions);
-                changed = true;
-            }
-            catch (JsonException)
-            {
-                // Ignore malformed lines and continue.
-            }
-        }
-
-        if (!changed)
-        {
-            return;
-        }
-
         await FileLock.WaitAsync(cancellationToken);
         try
         {
+            if (string.IsNullOrWhiteSpace(serviceBusMessageId) || !File.Exists(_historyFilePath))
+            {
+                return;
+            }
+
+            var lines = await File.ReadAllLinesAsync(_historyFilePath, cancellationToken);
+            var changed = false;
+
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var line = lines[index];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var entry = JsonSerializer.Deserialize<MessageHistoryEntry>(line, SerializerOptions);
+                    if (entry is null)
+                    {
+                        continue;
+                    }
+
+                    if (!string.Equals(entry.ServiceBusMessageId, serviceBusMessageId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var updatedEntry = entry with
+                    {
+                        Outcome = outcome,
+                        FailureReason = failureReason
+                    };
+
+                    lines[index] = JsonSerializer.Serialize(updatedEntry, SerializerOptions);
+                    changed = true;
+                }
+                catch (JsonException)
+                {
+                    // Ignore malformed lines and continue.
+                }
+            }
+
+            if (!changed)
+            {
+                return;
+            }
+
             await File.WriteAllLinesAsync(_historyFilePath, lines, cancellationToken);
         }
         finally
