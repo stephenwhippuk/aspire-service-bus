@@ -29,4 +29,19 @@ public class ReceiverServiceRegistrationTests
             service.ImplementationType == typeof(ServiceBusProcessingBackgroundService));
         Assert.NotNull(descriptor);
     }
+
+    [Fact]
+    public void ReceivedMessageEnvelope_StoresMessageIdBodyAndHeaders()
+    {
+        var headers = new Dictionary<string, string>
+        {
+            ["trace-id"] = "abc-123"
+        };
+
+        var envelope = new ReceivedMessageEnvelope("msg-1", "{\"hello\":\"world\"}", headers);
+
+        Assert.Equal("msg-1", envelope.MessageId);
+        Assert.Equal("{\"hello\":\"world\"}", envelope.Body);
+        Assert.Equal(headers, envelope.Headers);
+    }
 }
