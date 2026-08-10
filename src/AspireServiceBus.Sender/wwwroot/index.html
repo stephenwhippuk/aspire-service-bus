@@ -682,6 +682,15 @@
             offcanvas.show();
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function getHistoryBodyPreview(entry) {
             const request = entry.request || entry.Request || {};
             const body = request.bodyJson || entry.bodyJson || '';
@@ -715,11 +724,11 @@
                         <button class="accordion-button collapsed" type="button" aria-expanded="false" aria-controls="${bodyId}">
                             <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 w-100">
                                 <div class="small text-start">
-                                    <div class="fw-semibold">${timestamp}</div>
-                                    <div class="meta">${entityName}</div>
+                                    <div class="fw-semibold">${escapeHtml(timestamp)}</div>
+                                    <div class="meta">${escapeHtml(entityName)}</div>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
-                                    <span class="header-pill">${statusLabel}</span>
+                                    <span class="header-pill">${escapeHtml(statusLabel)}</span>
                                 </div>
                             </div>
                         </button>
@@ -728,15 +737,15 @@
                         <div class="accordion-body">
                             <div class="d-flex flex-wrap gap-2 mb-3">
                                 <button type="button" class="btn btn-sm btn-outline-success" data-action="edit"><i class="fa-solid fa-pen"></i> Edit</button>
-                                <button type="button" class="btn btn-sm btn-outline-light" data-action="action"><i class="fa-solid fa-paper-plane"></i> ${actionLabel}</button>
+                                <button type="button" class="btn btn-sm btn-outline-light" data-action="action"><i class="fa-solid fa-paper-plane"></i> ${escapeHtml(actionLabel)}</button>
                             </div>
                             <div class="mb-3">
                                 <div class="meta mb-1">Body</div>
-                                <pre>${getHistoryBodyPreview(entry)}</pre>
+                                <pre>${escapeHtml(getHistoryBodyPreview(entry))}</pre>
                             </div>
                             <div>
                                 <div class="meta mb-1">Headers</div>
-                                <pre>${JSON.stringify(entry.effectiveHeaders || entry.EffectiveHeaders || {}, null, 2)}</pre>
+                                <pre>${escapeHtml(JSON.stringify(entry.effectiveHeaders || entry.EffectiveHeaders || {}, null, 2))}</pre>
                             </div>
                         </div>
                     </div>
