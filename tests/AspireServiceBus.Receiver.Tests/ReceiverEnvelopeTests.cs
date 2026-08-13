@@ -22,4 +22,15 @@ public class ReceiverEnvelopeTests
         Assert.Equal(envelope.Headers["entity-name"], roundTripped.Headers["entity-name"]);
         Assert.Equal(envelope.Headers["trace"], roundTripped.Headers["trace"]);
     }
+
+    [Theory]
+    [InlineData("store", true)]
+    [InlineData("STORE", true)]
+    [InlineData("non-store", false)]
+    [InlineData("none-store", false)]
+    [InlineData(null, false)]
+    public void Worker_DetectsStoreMessages(string? entityName, bool expected)
+    {
+        Assert.Equal(expected, Worker.IsStoreMessage(entityName));
+    }
 }

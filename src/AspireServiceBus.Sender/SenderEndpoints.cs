@@ -26,6 +26,11 @@ public static class SenderEndpoints
 
     public static IEndpointRouteBuilder MapSenderEndpoints(this IEndpointRouteBuilder app, string queueName, string? localLogPath)
     {
+        app.MapGet("/explorer/entities", (IExplorerEntityCatalog explorerCatalog) =>
+        {
+            return new JsonHttpResult(explorerCatalog.GetResponse(), StatusCodes.Status200OK);
+        });
+
         app.MapGet("/history/success", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken, int take = 20, int skip = 0) =>
         {
             var history = await historyStore.GetByOutcomeAsync(MessageHistoryOutcome.Success, take == 0 ? 50 : take, skip, cancellationToken);
@@ -57,6 +62,7 @@ public static class SenderEndpoints
             var client = httpContext.RequestServices.GetService<ServiceBusClient>();
             var historyStore = httpContext.RequestServices.GetRequiredService<IMessageHistoryStore>();
 
+            logger.LogDebug("Received send request for queue {QueueName} with payload {@Payload}", queueName, request);
             return await ExecuteSendAsync(logger, historyStore, client, queueName, localLogPath, request, cancellationToken);
         });
 
@@ -110,6 +116,8 @@ public static class SenderEndpoints
         {
             const string unavailableMessage = "Service Bus connection is not available yet. The service will stay running and retry once the emulator connection is configured.";
 
+            logger.LogWarning("Service Bus client unavailable for queue {QueueName}. Returning 503 with request {@Request}", queueName, request);
+
             await historyStore.AppendAsync(CreateHistoryEntry(
                 queueName,
                 MessageHistoryOutcome.Failed,
@@ -156,6 +164,9 @@ public static class SenderEndpoints
                 }
             }
 
+            logger.LogInformation("Sending message to queue {QueueName} with message id {MessageId}", queueName, message.MessageId);
+            logger.LogDebug("Send request details for queue {QueueName}: {@MessageProperties}", queueName, message.ApplicationProperties);
+
             await sender.SendMessageAsync(message, cancellationToken);
 
             await historyStore.AppendAsync(CreateHistoryEntry(
@@ -182,6 +193,8 @@ public static class SenderEndpoints
         catch (ServiceBusException ex) when (IsTransientServiceBusFailure(ex))
         {
             const string transientFailureMessage = "Unable to reach the Service Bus emulator. Verify that the emulator is running and the connection is available.";
+
+            logger.LogWarning(ex, "Transient Service Bus failure while sending to queue {QueueName}", queueName);
 
             await historyStore.AppendAsync(CreateHistoryEntry(
                 queueName,
@@ -265,7 +278,8 @@ public static class SenderEndpoints
             request?.EntityName ?? entry.Request.EntityName,
             request?.TargetApplication ?? entry.Request.TargetApplication,
             request?.BodyJson ?? entry.BodyJson,
-            request?.CustomHeaders ?? entry.Request.CustomHeaders?.ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase));
+            request?.CustomHeaders ?? entry.Request.CustomHeaders?.ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase),
+            null);
     }
 
     private static IReadOnlyDictionary<string, string> BuildEffectiveHeaders(SendMessageRequest request)
@@ -333,11 +347,13 @@ public sealed record SendMessageRequest(
     string EntityName,
     string TargetApplication,
     string BodyJson,
-    Dictionary<string, string>? CustomHeaders);
+    Dictionary<string, string>? CustomHeaders,
+    string? EntityType = null);
 
 public sealed record ResendHistoryRequest(
     string? Timestamp,
     string? EntityName,
     string? TargetApplication,
     string? BodyJson,
-    Dictionary<string, string>? CustomHeaders);
+    Dictionary<string, string>? CustomHeaders,
+    string? EntityType = null);

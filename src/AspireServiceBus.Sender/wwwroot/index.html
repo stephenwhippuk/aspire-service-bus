@@ -351,7 +351,7 @@
             <div>
                 <p class="text-uppercase small mb-2 brand-accent"><i class="fa-solid fa-satellite-dish"></i> Aspire Service Bus</p>
                 <h1 class="display-6 fw-semibold mb-2">Message orchestration studio</h1>
-                <p class="mb-0 muted">Queue: <strong class="text-white">default-queue</strong></p>
+                <p class="mb-0 muted">Target: <strong id="activeEntityLabel" class="text-white">default-queue</strong></p>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-success" id="newMessageBtn"><i class="fa-solid fa-plus"></i> New message</button>
@@ -363,16 +363,12 @@
             <div class="col-lg-4">
                 <div class="card glass-card h-100">
                     <div class="card-body">
-                        <h2 class="h5 fw-semibold mb-3 demo-context-title"><i class="fa-solid fa-layer-group brand-accent"></i> Demo context</h2>
-                        <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded demo-context-status">
-                            <span class="fw-semibold">Queue state</span>
-                            <span class="badge">Live</span>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h5 fw-semibold mb-0 demo-context-title"><i class="fa-solid fa-sitemap brand-accent"></i> Explorer</h2>
+                            <span class="badge bg-success-subtle text-success-emphasis" id="entityBadge">QUEUE</span>
                         </div>
-                        <ul class="list-unstyled small mb-0 demo-context-list">
-                            <li class="mb-2"><i class="fa-solid fa-bolt"></i> Sender remains the focus of the demo.</li>
-                            <li class="mb-2"><i class="fa-solid fa-microchip"></i> Durable function remains a contextual placeholder.</li>
-                            <li><i class="fa-solid fa-shield-halved"></i> Success and failed history are now visible in the workflow view.</li>
-                        </ul>
+                        <p class="small muted mb-3">The explorer surfaces configured targets so the composer can choose the queue or topic that receives the message.</p>
+                        <div id="entityExplorerList" class="d-grid gap-2"></div>
                     </div>
                 </div>
             </div>
@@ -461,7 +457,8 @@
             </div>
             <div class="mb-3">
                 <label for="entityName" class="form-label">entity-name</label>
-                <input id="entityName" class="form-control" value="default-queue" />
+                <input id="entityName" class="form-control" value="store" />
+                <div class="form-text text-light-emphasis">This is the message value carried in the payload and header. It is independent of the selected Service Bus target.</div>
             </div>
             <div class="mb-3">
                 <label for="targetApplication" class="form-label">target-application</label>
@@ -505,6 +502,9 @@
         const validationSummary = document.getElementById('validationSummary');
         const statusDiv = document.getElementById('status');
         const statusBar = document.getElementById('statusBar');
+        const activeEntityLabel = document.getElementById('activeEntityLabel');
+        const entityExplorerList = document.getElementById('entityExplorerList');
+        const entityBadge = document.getElementById('entityBadge');
         const successHistoryDiv = document.getElementById('successHistory');
         const failedHistoryDiv = document.getElementById('failedHistory');
         const composerOffcanvas = document.getElementById('composerOffcanvas');
@@ -516,11 +516,12 @@
 
         function resetForm() {
             timestampInput.value = new Date().toISOString();
-            entityNameInput.value = 'default-queue';
+            entityNameInput.value = 'store';
             targetAppInput.value = 'receiver';
             bodyInput.value = '{\n    "message": "hello"\n}';
             clearHeaders();
             addHeaderRow();
+            updateEntityDisplay('store', 'queue');
             validateForm();
         }
 
@@ -637,7 +638,7 @@
 
             return {
                 timestamp: request.timestamp || entry.timestamp || new Date().toISOString(),
-                entityName: request.entityName || entry.entityName || 'default-queue',
+                entityName: request.entityName || entry.entityName || 'store',
                 targetApplication: request.targetApplication || entry.targetApplication || 'receiver',
                 bodyJson: request.bodyJson || entry.bodyJson || '{\n    "message": "hello"\n}',
                 customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : undefined
@@ -661,9 +662,10 @@
         function populateFormFromEntry(entry) {
             const request = entry.request || entry.Request || {};
             timestampInput.value = request.timestamp || entry.timestamp || new Date().toISOString();
-            entityNameInput.value = request.entityName || entry.entityName || 'default-queue';
+            entityNameInput.value = request.entityName || entry.entityName || 'store';
             targetAppInput.value = request.targetApplication || entry.targetApplication || 'receiver';
             bodyInput.value = request.bodyJson || entry.bodyJson || '{\n    "message": "hello"\n}';
+            updateEntityDisplay(request.entityName || entry.entityName || 'store', 'queue');
             clearHeaders();
 
             const effectiveHeaders = entry.effectiveHeaders || entry.EffectiveHeaders || {};
@@ -689,6 +691,95 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function updateEntityDisplay(entityName, kind = 'queue') {
+            const normalizedKind = String(kind || 'queue').toLowerCase();
+            if (activeEntityLabel) {
+                activeEntityLabel.textContent = entityName || 'store';
+            }
+            if (entityBadge) {
+                entityBadge.textContent = normalizedKind === 'topic' ? 'TOPIC' : 'QUEUE';
+                entityBadge.className = normalizedKind === 'topic'
+                    ? 'badge bg-primary-subtle text-primary-emphasis'
+                    : 'badge bg-success-subtle text-success-emphasis';
+            }
+        }
+
+        function renderExplorerEntities(payload) {
+            entityExplorerList.innerHTML = '';
+
+            const entities = Array.isArray(payload?.entities) ? payload.entities : [];
+            if (!entities.length) {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'placeholder-card';
+                emptyState.textContent = 'No entities are configured yet.';
+                entityExplorerList.appendChild(emptyState);
+                return;
+            }
+
+            entities.forEach(entity => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-outline-light text-start d-flex justify-content-between align-items-center';
+                button.dataset.entityName = entity.name;
+
+                const labelBlock = document.createElement('div');
+                labelBlock.className = 'text-start';
+                const label = document.createElement('div');
+                label.className = 'fw-semibold';
+                label.textContent = entity.name;
+                const description = document.createElement('div');
+                description.className = 'small muted';
+                description.textContent = entity.description || 'Queue entity';
+                labelBlock.append(label, description);
+
+                const badgeBlock = document.createElement('div');
+                badgeBlock.className = 'd-flex flex-column align-items-end gap-1';
+                const kindPill = document.createElement('span');
+                kindPill.className = 'badge bg-dark-subtle';
+                kindPill.textContent = entity.kind?.toUpperCase() || 'QUEUE';
+                const countPill = document.createElement('span');
+                countPill.className = 'badge bg-success-subtle text-success-emphasis';
+                const queuedCount = entity.count ?? 0;
+                const deadLetterCount = entity.deadLetterCount ?? 0;
+                countPill.textContent = `(${queuedCount}, ${deadLetterCount})`;
+                badgeBlock.append(kindPill, countPill);
+
+                button.append(labelBlock, badgeBlock);
+                button.addEventListener('click', () => {
+                    updateEntityDisplay(entity.name, entity.kind);
+                    setStatus(`Selected ${entity.name}.`, false);
+                });
+
+                entityExplorerList.appendChild(button);
+            });
+
+            const selectedEntity = payload?.selectedEntity || entities[0]?.name || 'default-queue';
+            const selectedEntry = entities.find(entity => entity.name === selectedEntity) || entities[0];
+            if (selectedEntry) {
+                updateEntityDisplay(selectedEntry.name, selectedEntry.kind);
+            }
+        }
+
+        async function loadExplorerEntities() {
+            try {
+                const response = await fetch('/explorer/entities');
+                if (!response.ok) {
+                    throw new Error('Unable to load explorer entities');
+                }
+                const payload = await response.json();
+                renderExplorerEntities(payload);
+            } catch (err) {
+                setStatus(`Explorer unavailable: ${err.message}`, true);
+            }
+        }
+
+        function startExplorerRefreshLoop() {
+            window.clearInterval(window.explorerRefreshTimer);
+            window.explorerRefreshTimer = window.setInterval(() => {
+                loadExplorerEntities().catch(() => {});
+            }, 5000);
         }
 
         function getHistoryBodyPreview(entry) {
@@ -830,8 +921,10 @@
                 if (response.ok) {
                     setStatus(`Resent from history entry ${entry.id}.`);
                     await loadHistory();
+                    await loadExplorerEntities();
                 } else {
                     setStatus(data.error || 'Resend failed', true);
+                    await loadExplorerEntities();
                 }
             } catch (err) {
                 setStatus(err.message || 'Resend failed', true);
@@ -859,6 +952,9 @@
         });
 
         validationInputs.forEach(input => input.addEventListener('input', validateForm));
+        entityNameInput.addEventListener('input', () => {
+            validateForm();
+        });
         newMessageBtn.addEventListener('click', () => {
             resetForm();
             offcanvas.show();
@@ -887,22 +983,35 @@
                     timestampInput.value = new Date().toISOString();
                     validateForm();
                     await loadHistory();
+                    await loadExplorerEntities();
                 } else {
                     setStatus(data.error || 'Send failed', true);
                     await loadHistory();
+                    await loadExplorerEntities();
                 }
             } catch (err) {
                 setStatus(err.message || 'Send failed', true);
             }
         });
 
-        refreshHistoryBtn.addEventListener('click', loadHistory);
-        purgeSuccessBtn.addEventListener('click', () => purgeHistory('success'));
-        purgeFailedBtn.addEventListener('click', () => purgeHistory('failed'));
+        refreshHistoryBtn.addEventListener('click', async () => {
+            await loadHistory();
+            await loadExplorerEntities();
+        });
+        purgeSuccessBtn.addEventListener('click', async () => {
+            await purgeHistory('success');
+            await loadExplorerEntities();
+        });
+        purgeFailedBtn.addEventListener('click', async () => {
+            await purgeHistory('failed');
+            await loadExplorerEntities();
+        });
 
         resetForm();
         validateForm();
+        loadExplorerEntities();
         loadHistory();
+        startExplorerRefreshLoop();
     </script>
 </body>
 </html>

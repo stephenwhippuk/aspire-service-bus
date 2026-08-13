@@ -35,6 +35,10 @@ public sealed class FileMessageHistoryStore : IMessageHistoryStore
         {
             await File.AppendAllTextAsync(_historyFilePath, line, cancellationToken);
         }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to append history entry to {HistoryFilePath}", _historyFilePath);
+        }
         finally
         {
             FileLock.Release();
