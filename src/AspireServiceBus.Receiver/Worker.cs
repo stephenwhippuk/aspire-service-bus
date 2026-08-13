@@ -55,6 +55,16 @@ public class Worker : BackgroundService
         {
             try
             {
+                var entityName = args.Message.ApplicationProperties.TryGetValue("entity-name", out var entityNameValue)
+                    ? entityNameValue?.ToString()
+                    : null;
+
+                if (!IsStoreMessage(entityName))
+                {
+                    _logger.LogWarning("Message {MessageId} has entity-name {EntityName} and will be treated as non-store so it can be retried and dead-lettered.", args.Message.MessageId, entityName ?? "<none>");
+                    throw new InvalidOperationException($"Message {args.Message.MessageId} is not a store message and should be dead-lettered.");
+                }
+
                 var bodyText = args.Message.Body.ToString();
                 using var bodyJson = JsonDocument.Parse(bodyText);
 
@@ -132,6 +142,11 @@ public class Worker : BackgroundService
             await processor.StopProcessingAsync(CancellationToken.None);
             await processor.DisposeAsync();
         }
+    }
+
+    public static bool IsStoreMessage(string? entityName)
+    {
+        return string.Equals(entityName, "store", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task AppendLocalLogAsync(object payload, CancellationToken cancellationToken)

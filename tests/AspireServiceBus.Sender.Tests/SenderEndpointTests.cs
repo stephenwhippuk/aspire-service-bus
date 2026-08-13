@@ -14,11 +14,13 @@ namespace AspireServiceBus.Sender.Tests;
 
 public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
     private readonly string _historyFilePath;
 
     public SenderEndpointTests(WebApplicationFactory<Program> factory)
     {
+        _factory = factory;
         _historyFilePath = Path.Combine(Path.GetTempPath(), $"sender-history-{Guid.NewGuid():N}.ndjson");
 
         _client = factory.WithWebHostBuilder(builder =>
@@ -36,6 +38,167 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
                 services.RemoveAll<ServiceBusClient>();
             });
         }).CreateClient();
+    }
+    
+    [Fact]
+    public void ResolveConnectionString_PrefersEnvironmentValueWhenConfiguredEntryIsEmpty()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:servicebus"] = string.Empty,
+                ["ConnectionStrings__servicebus"] = "Endpoint=sb://127.0.0.1:32836;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+            })
+            .Build();
+
+        var connectionString = ServiceBusConnectionSettings.ResolveConnectionString(configuration);
+
+        Assert.Equal("Endpoint=sb://127.0.0.1:32836;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;", connectionString);
+    }
+
+    [Fact]
+    public void CreateDiagnostics_ExposesResolvedAndRawSettings()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ServiceBus:QueueName"] = "priority-queue",
+                ["ConnectionStrings:servicebus"] = string.Empty,
+                ["ConnectionStrings__servicebus"] = "Endpoint=sb://127.0.0.1:32836;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;",
+                ["History:FilePath"] = "/tmp/history.ndjson",
+                ["Logging:LocalFilePath"] = "/tmp/sender.log"
+            })
+            .Build();
+
+        var diagnostics = ServiceBusConnectionSettings.CreateDiagnostics(configuration, "priority-queue", "/tmp/history.ndjson", "/tmp/sender.log");
+
+        Assert.Equal("priority-queue", diagnostics.QueueName);
+        Assert.True(diagnostics.HasResolvedConnectionString);
+        Assert.Equal("Endpoint=sb://127.0.0.1:32836;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;", diagnostics.ResolvedConnectionString);
+        Assert.Equal("/tmp/history.ndjson", diagnostics.HistoryFilePath);
+        Assert.Equal("/tmp/sender.log", diagnostics.LocalLogPath);
+    }
+
+    [Fact]
+    public void Composer_UsesSingleEntityNameField()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AspireServiceBus.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+
+        var htmlPath = Path.Combine(directory!.FullName, "src", "AspireServiceBus.Sender", "wwwroot", "index.html");
+        Assert.True(File.Exists(htmlPath), $"Expected composer markup at {htmlPath}");
+
+        var html = File.ReadAllText(htmlPath);
+        Assert.Contains("<input id=\"entityName\"", html);
+        Assert.DoesNotContain("id=\"entityType\"", html);
+        Assert.Contains("entity-name", html);
+    }
+
+    [Fact]
+    public void Explorer_PageRefreshesEntityCountsPeriodically()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AspireServiceBus.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+
+        var htmlPath = Path.Combine(directory!.FullName, "src", "AspireServiceBus.Sender", "wwwroot", "index.html");
+        Assert.True(File.Exists(htmlPath), $"Expected composer markup at {htmlPath}");
+
+        var html = File.ReadAllText(htmlPath);
+        Assert.Contains("window.setInterval", html);
+        Assert.Contains("loadExplorerEntities().catch", html);
+    }
+
+    [Fact]
+    public void Explorer_TargetSelection_DoesNotOverwriteEntityNameField()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AspireServiceBus.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+
+        var htmlPath = Path.Combine(directory!.FullName, "src", "AspireServiceBus.Sender", "wwwroot", "index.html");
+        Assert.True(File.Exists(htmlPath), $"Expected composer markup at {htmlPath}");
+
+        var html = File.ReadAllText(htmlPath);
+        Assert.DoesNotContain("entityNameInput.value = entityName", html);
+        Assert.Contains("Target:", html);
+    }
+
+    [Fact]
+    public async Task Explorer_Entities_AreExposedThroughEndpoint()
+    {
+        var explorerClient = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Explorer:Entities:0:Name"] = "default-queue",
+                    ["Explorer:Entities:0:Kind"] = "queue",
+                    ["Explorer:Entities:0:Description"] = "Primary demo queue",
+                    ["Explorer:Entities:1:Name"] = "orders-topic",
+                    ["Explorer:Entities:1:Kind"] = "topic",
+                    ["Explorer:Entities:1:Description"] = "Publish/subscribe topic"
+                });
+            });
+        }).CreateClient();
+
+        var response = await explorerClient.GetAsync("/explorer/entities");
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("default-queue", payload.GetProperty("selectedEntity").GetString());
+
+        var entities = payload.GetProperty("entities").EnumerateArray().ToList();
+        Assert.Equal(2, entities.Count);
+        Assert.Equal("default-queue", entities[0].GetProperty("name").GetString());
+        Assert.Equal("queue", entities[0].GetProperty("kind").GetString());
+        Assert.Equal("orders-topic", entities[1].GetProperty("name").GetString());
+        Assert.Equal("topic", entities[1].GetProperty("kind").GetString());
+    }
+
+    [Fact]
+    public async Task Explorer_QueueAndDeadLetterCounts_AreExposed()
+    {
+        var explorerClient = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Explorer:Entities:0:Name"] = "default-queue",
+                    ["Explorer:Entities:0:Kind"] = "queue",
+                    ["Explorer:Entities:1:Name"] = "default-queue/$DeadLetterQueue",
+                    ["Explorer:Entities:1:Kind"] = "queue",
+                    ["Explorer:Counts:default-queue"] = "7",
+                    ["Explorer:Counts:default-queue/$DeadLetterQueue"] = "2"
+                });
+            });
+        }).CreateClient();
+
+        var response = await explorerClient.GetAsync("/explorer/entities");
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var entities = payload.GetProperty("entities").EnumerateArray().ToList();
+
+        Assert.Single(entities);
+        Assert.Equal("default-queue", entities[0].GetProperty("name").GetString());
+        Assert.Equal(7, entities[0].GetProperty("count").GetInt64());
+        Assert.Equal(2, entities[0].GetProperty("deadLetterCount").GetInt64());
     }
 
     [Fact]
@@ -158,6 +321,33 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         var failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
         Assert.NotNull(failedHistory);
         Assert.NotEmpty(failedHistory!.Items);
+    }
+
+    [Fact]
+    public async Task Send_PreservesSelectedEntityNameInRequestAndHeaders()
+    {
+        var response = await _client.PostAsJsonAsync("/send", new
+        {
+            timestamp = "2026-08-08T00:00:00Z",
+            entityName = "supplier",
+            targetApplication = "receiver",
+            bodyJson = "{\"message\":\"hello\"}",
+            customHeaders = new Dictionary<string, string> { ["trace"] = "abc" }
+        });
+
+        Assert.True(response.StatusCode is HttpStatusCode.ServiceUnavailable or HttpStatusCode.OK or HttpStatusCode.BadRequest);
+
+        var failedHistoryResponse = await _client.GetAsync("/history/failed?take=20&skip=0");
+        failedHistoryResponse.EnsureSuccessStatusCode();
+
+        var failedHistory = await failedHistoryResponse.Content.ReadFromJsonAsync<MessageHistoryQueryResult>();
+        Assert.NotNull(failedHistory);
+        Assert.NotEmpty(failedHistory!.Items);
+
+        var entry = failedHistory.Items[0];
+        Assert.Equal("supplier", entry.Request.EntityName);
+        Assert.Equal("supplier", entry.EffectiveHeaders["entity-name"]);
+        Assert.False(entry.EffectiveHeaders.ContainsKey("entity-type"));
     }
 
     [Fact]

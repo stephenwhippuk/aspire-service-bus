@@ -66,6 +66,15 @@ Provide a POC Aspire module that offers a convenient UI for creating and publish
 8. Given a non-JSON body is provided, when submit is attempted, then the UI blocks send and shows a JSON validation error.
 9. Given a message is received, logs are emitted as structured JSON to console (and optionally local file output if enabled).
 
+## Steering Decisions (2026-08-10)
+
+1. The sender should be treated as a first-class Aspire resource rather than a one-off local UI.
+2. The sender should be packaged and consumed as a NuGet component and wired into AppHost through a standard resource integration model.
+3. The sender UI should evolve into a Service Bus Explorer-style experience, with a left-side panel showing discovered queues and topics from the registered Service Bus resource.
+4. Multi-service-bus support should be planned as the next milestone, so the explorer model should be designed to support multiple Service Bus registrations from the outset.
+
 ## Open Decisions To Clarify
 
-1. None currently.
+1. Which Aspire resource contract should the sender implement for AppHost integration?
+2. How should entity discovery be provided for the initial explorer iteration (configuration-driven vs runtime discovery)?
+3. Which entity details are required in the first pass: queue/topic names, subscriptions, status, or message counts?

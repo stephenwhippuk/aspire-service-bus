@@ -1,36 +1,58 @@
 using AspireServiceBus.Receiver;
-using AspireServiceBus.Sender;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Logging;
 
-var hostEndpoint = Environment.GetEnvironmentVariable("Functions__Worker__HostEndpoint")
-    ?? Environment.GetEnvironmentVariable("FUNCTIONS__WORKER__HOSTENDPOINT")
-    ?? Environment.GetEnvironmentVariable("Functions:Worker:HostEndpoint")
-    ?? Environment.GetEnvironmentVariable("FUNCTIONS_WORKER_HOST_ENDPOINT");
-
-if (string.IsNullOrWhiteSpace(hostEndpoint) || hostEndpoint == "http://:")
+AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
 {
-    Console.WriteLine("Azure Functions host endpoint is not available. The receiver will stay idle until it is started by the Functions host runtime.");
+    Console.Error.WriteLine($"[receiver] Unhandled exception: {eventArgs.ExceptionObject}");
+};
 
-    var fallbackHost = Host.CreateDefaultBuilder(args)
-        .ConfigureServices(services =>
-        {
-            services.AddReceiverServices(enableBackgroundProcessor: true);
-        })
-        .Build();
+TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
+{
+    Console.Error.WriteLine($"[receiver] Unobserved task exception: {eventArgs.Exception}");
+    eventArgs.SetObserved();
+};
 
-    await fallbackHost.RunAsync();
-    return;
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.ClearProviders();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.SingleLine = false;
+    options.TimestampFormat = "HH:mm:ss ";
+});
+builder.Logging.SetMinimumLevel(LogLevel.Debug);
+builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
+builder.Logging.AddFilter("System", LogLevel.Warning);
+builder.Logging.AddFilter("AspireServiceBus", LogLevel.Debug);
+
+var queueName = ReceiverConfiguration.ResolveQueueName(builder.Configuration);
+var serviceBusConnectionString = ReceiverConfiguration.ResolveServiceBusConnectionString(builder.Configuration);
+var localLogPath = builder.Configuration["Logging:LocalFilePath"] ?? Environment.GetEnvironmentVariable("SERVICEBUS_LOG_FILE");
+
+builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
+
+if (!string.IsNullOrWhiteSpace(serviceBusConnectionString))
+{
+    builder.Services.AddSingleton(new ServiceBusClient(serviceBusConnectionString));
 }
 
-var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
-    .ConfigureServices(services =>
-    {
-        services.AddReceiverServices(enableBackgroundProcessor: false);
-    })
-    .Build();
+builder.Services.AddHostedService<Worker>();
 
-host.Run();
+var app = builder.Build();
+
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("ReceiverStartup");
+startupLogger.LogInformation("Receiver service starting with queue {QueueName}", queueName);
+startupLogger.LogDebug("Receiver startup configuration {@Configuration}", new
+{
+    queueName,
+    serviceBusConnectionString,
+    hasServiceBusConnectionString = !string.IsNullOrWhiteSpace(serviceBusConnectionString),
+    localLogPath,
+    functionsWorkerRuntime = Environment.GetEnvironmentVariable("FUNCTIONS_WORKER_RUNTIME")
+});
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok", queue = queueName }));
+app.MapGet("/", () => Results.Ok(new { status = "ready", queue = queueName }));
+
+app.Run();

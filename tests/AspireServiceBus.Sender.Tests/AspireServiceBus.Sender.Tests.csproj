@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\AspireServiceBus.AppHost\AspireServiceBus.AppHost.csproj" Aliases="AppHost" />
     <ProjectReference Include="..\..\src\AspireServiceBus.Sender\AspireServiceBus.Sender.csproj" />
   </ItemGroup>
 

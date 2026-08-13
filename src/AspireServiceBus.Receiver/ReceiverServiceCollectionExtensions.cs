@@ -6,7 +6,7 @@ namespace AspireServiceBus.Receiver;
 
 public static class ReceiverServiceCollectionExtensions
 {
-    public static IServiceCollection AddReceiverServices(this IServiceCollection services, bool enableBackgroundProcessor)
+    public static IServiceCollection AddReceiverServices(this IServiceCollection services)
     {
         services.AddLogging(logging =>
         {
@@ -26,11 +26,6 @@ public static class ReceiverServiceCollectionExtensions
             var logger = serviceProvider.GetRequiredService<ILogger<FileMessageHistoryStore>>();
             return new FileMessageHistoryStore(historyFilePath, logger);
         });
-
-        if (enableBackgroundProcessor)
-        {
-            services.AddHostedService<ServiceBusProcessingBackgroundService>();
-        }
 
         return services;
     }
