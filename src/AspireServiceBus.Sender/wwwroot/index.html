@@ -451,31 +451,56 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body">
-            <div class="mb-3">
-                <label for="timestamp" class="form-label">timestamp</label>
-                <input id="timestamp" class="form-control" />
-            </div>
-            <div class="mb-3">
-                <label for="entityName" class="form-label">entity-name</label>
-                <input id="entityName" class="form-control" value="store" />
-                <div class="form-text text-light-emphasis">This is the message value carried in the payload and header. It is independent of the selected Service Bus target.</div>
-            </div>
-            <div class="mb-3">
-                <label for="targetApplication" class="form-label">target-application</label>
-                <input id="targetApplication" class="form-control" value="receiver" />
-            </div>
+            <ul class="nav nav-tabs nav-fill mb-3" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="basicsTab" data-bs-toggle="tab" data-bs-target="#basicsPane" type="button" role="tab" aria-controls="basicsPane" aria-selected="true">Basics</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="criteriaTab" data-bs-toggle="tab" data-bs-target="#criteriaPane" type="button" role="tab" aria-controls="criteriaPane" aria-selected="false">Criteria</button>
+                </li>
+            </ul>
 
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <label class="form-label mb-0">Custom headers</label>
-                <button type="button" class="btn btn-sm btn-outline-success" id="addHeader"><i class="fa-solid fa-plus"></i> Add header</button>
-            </div>
-            <div id="customHeaders" class="mb-3"></div>
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="basicsPane" role="tabpanel" aria-labelledby="basicsTab">
+                    <div class="mb-3">
+                        <label for="timestamp" class="form-label">timestamp</label>
+                        <input id="timestamp" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="entityName" class="form-label">entity-name</label>
+                        <input id="entityName" class="form-control" value="store" />
+                        <div class="form-text text-light-emphasis">This is the message value carried in the payload and header. It is independent of the selected Service Bus target.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="targetApplication" class="form-label">target-application</label>
+                        <input id="targetApplication" class="form-control" value="receiver" />
+                    </div>
 
-            <div class="mb-3">
-                <label for="bodyJson" class="form-label">Body (JSON)</label>
-                <textarea id="bodyJson" class="form-control" rows="12">{
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">Custom headers</label>
+                        <button type="button" class="btn btn-sm btn-outline-success" id="addHeader"><i class="fa-solid fa-plus"></i> Add header</button>
+                    </div>
+                    <div id="customHeaders" class="mb-3"></div>
+
+                    <div class="mb-3">
+                        <label for="bodyJson" class="form-label">Body (JSON)</label>
+                        <textarea id="bodyJson" class="form-control" rows="12">{
     "message": "hello"
 }</textarea>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="criteriaPane" role="tabpanel" aria-labelledby="criteriaTab">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="doesNotDeadLetter" />
+                        <label class="form-check-label" for="doesNotDeadLetter">Do not dead-letter on failure</label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="waitTimeSeconds" class="form-label">Wait time (seconds)</label>
+                        <input id="waitTimeSeconds" class="form-control" type="number" min="0" step="1" value="0" />
+                        <div class="form-text text-light-emphasis">The sender will release the message into success once this wait time has elapsed and it is no longer visible in Service Bus.</div>
+                    </div>
+                </div>
             </div>
 
             <div id="validationSummary" class="status-message status-error mb-3" style="display:none;"></div>
@@ -495,6 +520,8 @@
         const addHeaderBtn = document.getElementById('addHeader');
         const sendBtn = document.getElementById('sendBtn');
         const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+        const doesNotDeadLetterInput = document.getElementById('doesNotDeadLetter');
+        const waitTimeSecondsInput = document.getElementById('waitTimeSeconds');
         const newMessageBtn = document.getElementById('newMessageBtn');
         const purgeSuccessBtn = document.getElementById('purgeSuccessBtn');
         const purgeFailedBtn = document.getElementById('purgeFailedBtn');
@@ -508,6 +535,8 @@
         const successHistoryDiv = document.getElementById('successHistory');
         const failedHistoryDiv = document.getElementById('failedHistory');
         const composerOffcanvas = document.getElementById('composerOffcanvas');
+        let historySocket = null;
+        let historySocketReconnectTimer = null;
 
         const validationInputs = [timestampInput, entityNameInput, targetAppInput, bodyInput];
         const offcanvas = new bootstrap.Offcanvas(composerOffcanvas);
@@ -519,6 +548,8 @@
             entityNameInput.value = 'store';
             targetAppInput.value = 'receiver';
             bodyInput.value = '{\n    "message": "hello"\n}';
+            doesNotDeadLetterInput.checked = false;
+            waitTimeSecondsInput.value = '0';
             clearHeaders();
             addHeaderRow();
             updateEntityDisplay('store', 'queue');
@@ -613,6 +644,14 @@
                 }
             }
 
+            const waitTimeValue = Number(waitTimeSecondsInput.value);
+            if (waitTimeSecondsInput.value.trim() && (!Number.isInteger(waitTimeValue) || waitTimeValue < 0)) {
+                errors.push('wait time must be a non-negative whole number');
+                setFieldState(waitTimeSecondsInput, true);
+            } else {
+                setFieldState(waitTimeSecondsInput, false);
+            }
+
             sendBtn.disabled = errors.length > 0;
             validationSummary.style.display = errors.length ? 'block' : 'none';
             validationSummary.textContent = errors.join(' • ');
@@ -620,12 +659,15 @@
         }
 
         function buildPayload() {
+            const waitTimeValue = waitTimeSecondsInput.value.trim() === '' ? 0 : Number(waitTimeSecondsInput.value);
             return {
                 timestamp: timestampInput.value,
                 entityName: entityNameInput.value,
                 targetApplication: targetAppInput.value,
                 bodyJson: bodyInput.value,
-                customHeaders: getCustomHeaders()
+                customHeaders: getCustomHeaders(),
+                doesNotDeadLetter: doesNotDeadLetterInput.checked,
+                waitTimeSeconds: Number.isFinite(waitTimeValue) ? waitTimeValue : 0
             };
         }
 
@@ -636,13 +678,48 @@
                 Object.entries(effectiveHeaders).filter(([key]) => !['timestamp', 'entity-name', 'target-application'].includes(key.toLowerCase()))
             );
 
+            const waitTimeValue = request.waitTimeSeconds ?? entry.waitTimeSeconds ?? 0;
             return {
                 timestamp: request.timestamp || entry.timestamp || new Date().toISOString(),
                 entityName: request.entityName || entry.entityName || 'store',
                 targetApplication: request.targetApplication || entry.targetApplication || 'receiver',
                 bodyJson: request.bodyJson || entry.bodyJson || '{\n    "message": "hello"\n}',
-                customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : undefined
+                customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : undefined,
+                doesNotDeadLetter: request.doesNotDeadLetter ?? entry.doesNotDeadLetter ?? false,
+                waitTimeSeconds: waitTimeValue ?? 0
             };
+        }
+
+        function getHistorySocketUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            return `${protocol}${window.location.host}/ws/history`;
+        }
+
+        function connectHistorySocket() {
+            if (historySocket && (historySocket.readyState === WebSocket.OPEN || historySocket.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+
+            historySocket = new WebSocket(getHistorySocketUrl());
+            historySocket.addEventListener('message', event => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload?.type === 'history-changed') {
+                        loadHistory().catch(() => {});
+                        loadExplorerEntities().catch(() => {});
+                    }
+                } catch (err) {
+                    console.warn('Unable to parse history websocket payload', err);
+                }
+            });
+            historySocket.addEventListener('close', () => {
+                if (historySocketReconnectTimer) {
+                    window.clearTimeout(historySocketReconnectTimer);
+                }
+                historySocketReconnectTimer = window.setTimeout(() => {
+                    connectHistorySocket();
+                }, 2000);
+            });
         }
 
         function setStatus(message, isError = false) {
@@ -665,6 +742,8 @@
             entityNameInput.value = request.entityName || entry.entityName || 'store';
             targetAppInput.value = request.targetApplication || entry.targetApplication || 'receiver';
             bodyInput.value = request.bodyJson || entry.bodyJson || '{\n    "message": "hello"\n}';
+            doesNotDeadLetterInput.checked = Boolean(request.doesNotDeadLetter ?? entry.doesNotDeadLetter ?? false);
+            waitTimeSecondsInput.value = request.waitTimeSeconds ?? entry.waitTimeSeconds ?? 0;
             updateEntityDisplay(request.entityName || entry.entityName || 'store', 'queue');
             clearHeaders();
 
@@ -952,6 +1031,8 @@
         });
 
         validationInputs.forEach(input => input.addEventListener('input', validateForm));
+        waitTimeSecondsInput.addEventListener('input', validateForm);
+        doesNotDeadLetterInput.addEventListener('change', validateForm);
         entityNameInput.addEventListener('input', () => {
             validateForm();
         });
@@ -1011,6 +1092,7 @@
         validateForm();
         loadExplorerEntities();
         loadHistory();
+        connectHistorySocket();
         startExplorerRefreshLoop();
     </script>
 </body>

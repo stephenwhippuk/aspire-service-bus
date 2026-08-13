@@ -46,6 +46,8 @@ builder.Services.AddSingleton<IMessageHistoryStore>(serviceProvider =>
 });
 
 builder.Services.AddSingleton<IExplorerEntityCatalog, ExplorerEntityCatalog>();
+builder.Services.AddSingleton<HistoryUpdateBroadcaster>();
+builder.Services.AddHostedService<ServiceBusLifecycleBackgroundService>();
 
 if (!string.IsNullOrWhiteSpace(connectionString))
 {
@@ -84,6 +86,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     startupLogger.LogInformation("Sender is ready to accept traffic on queue {QueueName}", queueName);
 });
 
+app.UseWebSockets();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 

@@ -217,7 +217,8 @@ public sealed class FileMessageHistoryStore : IMessageHistoryStore
                     var updatedEntry = entry with
                     {
                         Outcome = outcome,
-                        FailureReason = failureReason
+                        FailureReason = failureReason,
+                        StateUpdatedAtUtc = DateTimeOffset.UtcNow
                     };
 
                     lines[index] = JsonSerializer.Serialize(updatedEntry, SerializerOptions);
