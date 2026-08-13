@@ -2,9 +2,10 @@ namespace AspireServiceBus.Sender;
 
 public static class MessageHistoryOutcome
 {
+    public const string Pending = "pending";
+    public const string Processing = "processing";
     public const string Success = "success";
     public const string Failed = "failed";
-    public const string Processing = "processing";
 }
 
 public sealed record MessageHistoryEntry(
@@ -18,7 +19,8 @@ public sealed record MessageHistoryEntry(
     IReadOnlyDictionary<string, string> EffectiveHeaders,
     string BodyJson,
     string? SourceAttemptId = null,
-    bool IsResend = false);
+    bool IsResend = false,
+    DateTimeOffset? StateUpdatedAtUtc = null);
 
 public sealed record MessageHistoryQueryResult(
     IReadOnlyList<MessageHistoryEntry> Items,

@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
 using Microsoft.AspNetCore.Http.Json;
@@ -31,6 +32,48 @@ public static class SenderEndpoints
             return new JsonHttpResult(explorerCatalog.GetResponse(), StatusCodes.Status200OK);
         });
 
+        app.Map("/ws/history", async (HttpContext context, HistoryUpdateBroadcaster broadcaster, CancellationToken cancellationToken) =>
+        {
+            if (!context.WebSockets.IsWebSocketRequest)
+            {
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+
+            using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+            await broadcaster.RegisterClientAsync(webSocket, cancellationToken);
+
+            try
+            {
+                while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+                {
+                    var buffer = new byte[1024];
+                    var result = await webSocket.ReceiveAsync(buffer, cancellationToken);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed", cancellationToken);
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                await broadcaster.RemoveClientAsync(webSocket, cancellationToken);
+            }
+        });
+
+        app.MapGet("/history/pending", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken, int take = 20, int skip = 0) =>
+        {
+            var history = await historyStore.GetByOutcomeAsync(MessageHistoryOutcome.Pending, take == 0 ? 50 : take, skip, cancellationToken);
+            return new JsonHttpResult(history, StatusCodes.Status200OK);
+        });
+
+        app.MapGet("/history/processing", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken, int take = 20, int skip = 0) =>
+        {
+            var history = await historyStore.GetByOutcomeAsync(MessageHistoryOutcome.Processing, take == 0 ? 50 : take, skip, cancellationToken);
+            return new JsonHttpResult(history, StatusCodes.Status200OK);
+        });
+
         app.MapGet("/history/success", async (IMessageHistoryStore historyStore, CancellationToken cancellationToken, int take = 20, int skip = 0) =>
         {
             var history = await historyStore.GetByOutcomeAsync(MessageHistoryOutcome.Success, take == 0 ? 50 : take, skip, cancellationToken);
@@ -61,9 +104,10 @@ public static class SenderEndpoints
             var logger = loggerFactory.CreateLogger("SenderEndpoints");
             var client = httpContext.RequestServices.GetService<ServiceBusClient>();
             var historyStore = httpContext.RequestServices.GetRequiredService<IMessageHistoryStore>();
+            var broadcaster = httpContext.RequestServices.GetRequiredService<HistoryUpdateBroadcaster>();
 
             logger.LogDebug("Received send request for queue {QueueName} with payload {@Payload}", queueName, request);
-            return await ExecuteSendAsync(logger, historyStore, client, queueName, localLogPath, request, cancellationToken);
+            return await ExecuteSendAsync(logger, historyStore, broadcaster, client, queueName, localLogPath, request, cancellationToken);
         });
 
         app.MapPost("/history/{id}/resend", async (string id, HttpContext httpContext, ResendHistoryRequest? request, CancellationToken cancellationToken) =>
@@ -72,6 +116,7 @@ public static class SenderEndpoints
             var logger = loggerFactory.CreateLogger("SenderEndpoints");
             var client = httpContext.RequestServices.GetService<ServiceBusClient>();
             var historyStore = httpContext.RequestServices.GetRequiredService<IMessageHistoryStore>();
+            var broadcaster = httpContext.RequestServices.GetRequiredService<HistoryUpdateBroadcaster>();
             var existingEntry = await historyStore.GetByIdAsync(id, cancellationToken);
             if (existingEntry is null)
             {
@@ -79,7 +124,7 @@ public static class SenderEndpoints
             }
 
             var resendRequest = CreateSendRequestFromHistory(existingEntry, request);
-            return await ExecuteSendAsync(logger, historyStore, client, queueName, localLogPath, resendRequest, cancellationToken, id);
+            return await ExecuteSendAsync(logger, historyStore, broadcaster, client, queueName, localLogPath, resendRequest, cancellationToken, id);
         });
 
         return app;
@@ -88,6 +133,7 @@ public static class SenderEndpoints
     private static async Task<IResult> ExecuteSendAsync(
         ILogger logger,
         IMessageHistoryStore historyStore,
+        HistoryUpdateBroadcaster broadcaster,
         ServiceBusClient? client,
         string queueName,
         string? localLogPath,
@@ -108,6 +154,7 @@ public static class SenderEndpoints
                 request.BodyJson,
                 failureReason: validationError,
                 sourceAttemptId: sourceAttemptId), cancellationToken);
+            await broadcaster.BroadcastAsync(new { type = "history-changed", reason = "entry-created" }, cancellationToken);
 
             return new JsonHttpResult(new { error = validationError }, StatusCodes.Status400BadRequest);
         }
@@ -126,6 +173,7 @@ public static class SenderEndpoints
                 request.BodyJson,
                 failureReason: unavailableMessage,
                 sourceAttemptId: sourceAttemptId), cancellationToken);
+            await broadcaster.BroadcastAsync(new { type = "history-changed", reason = "entry-created" }, cancellationToken);
 
             await AppendLocalLogAsync(localLogPath, new
             {
@@ -171,12 +219,13 @@ public static class SenderEndpoints
 
             await historyStore.AppendAsync(CreateHistoryEntry(
                 queueName,
-                MessageHistoryOutcome.Processing,
+                MessageHistoryOutcome.Pending,
                 request,
                 effectiveHeaders,
                 request.BodyJson,
                 serviceBusMessageId: message.MessageId,
                 sourceAttemptId: sourceAttemptId), cancellationToken);
+            await broadcaster.BroadcastAsync(new { type = "history-changed", reason = "entry-created" }, cancellationToken);
 
             await AppendLocalLogAsync(localLogPath, new
             {
@@ -188,7 +237,7 @@ public static class SenderEndpoints
                 headers = message.ApplicationProperties
             }, cancellationToken);
 
-            return new JsonHttpResult(new { status = "processing", queue = queueName, messageId = message.MessageId }, StatusCodes.Status202Accepted);
+            return new JsonHttpResult(new { status = "pending", queue = queueName, messageId = message.MessageId }, StatusCodes.Status202Accepted);
         }
         catch (ServiceBusException ex) when (IsTransientServiceBusFailure(ex))
         {
@@ -204,6 +253,7 @@ public static class SenderEndpoints
                 request.BodyJson,
                 failureReason: transientFailureMessage,
                 sourceAttemptId: sourceAttemptId), cancellationToken);
+            await broadcaster.BroadcastAsync(new { type = "history-changed", reason = "entry-created" }, cancellationToken);
 
             await AppendLocalLogAsync(localLogPath, new
             {
@@ -232,6 +282,7 @@ public static class SenderEndpoints
                 request.BodyJson,
                 failureReason: clientErrorMessage,
                 sourceAttemptId: sourceAttemptId), cancellationToken);
+            await broadcaster.BroadcastAsync(new { type = "history-changed", reason = "entry-created" }, cancellationToken);
 
             await AppendLocalLogAsync(localLogPath, new
             {
@@ -268,7 +319,8 @@ public static class SenderEndpoints
             EffectiveHeaders: effectiveHeaders,
             BodyJson: bodyJson,
             SourceAttemptId: sourceAttemptId,
-            IsResend: !string.IsNullOrWhiteSpace(sourceAttemptId));
+            IsResend: !string.IsNullOrWhiteSpace(sourceAttemptId),
+            StateUpdatedAtUtc: DateTimeOffset.UtcNow);
     }
 
     private static SendMessageRequest CreateSendRequestFromHistory(MessageHistoryEntry entry, ResendHistoryRequest? request)
@@ -279,7 +331,9 @@ public static class SenderEndpoints
             request?.TargetApplication ?? entry.Request.TargetApplication,
             request?.BodyJson ?? entry.BodyJson,
             request?.CustomHeaders ?? entry.Request.CustomHeaders?.ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase),
-            null);
+            null,
+            request?.DoesNotDeadLetter ?? entry.Request.DoesNotDeadLetter,
+            request?.WaitTimeSeconds ?? entry.Request.WaitTimeSeconds);
     }
 
     private static IReadOnlyDictionary<string, string> BuildEffectiveHeaders(SendMessageRequest request)
@@ -348,7 +402,9 @@ public sealed record SendMessageRequest(
     string TargetApplication,
     string BodyJson,
     Dictionary<string, string>? CustomHeaders,
-    string? EntityType = null);
+    string? EntityType = null,
+    bool DoesNotDeadLetter = false,
+    int? WaitTimeSeconds = null);
 
 public sealed record ResendHistoryRequest(
     string? Timestamp,
@@ -356,4 +412,6 @@ public sealed record ResendHistoryRequest(
     string? TargetApplication,
     string? BodyJson,
     Dictionary<string, string>? CustomHeaders,
-    string? EntityType = null);
+    string? EntityType = null,
+    bool? DoesNotDeadLetter = null,
+    int? WaitTimeSeconds = null);

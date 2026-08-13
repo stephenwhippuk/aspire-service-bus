@@ -100,6 +100,27 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public void Composer_ExposesBasicsAndCriteriaTabsWithCriteriaFields()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AspireServiceBus.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+
+        var htmlPath = Path.Combine(directory!.FullName, "src", "AspireServiceBus.Sender", "wwwroot", "index.html");
+        Assert.True(File.Exists(htmlPath), $"Expected composer markup at {htmlPath}");
+
+        var html = File.ReadAllText(htmlPath);
+        Assert.Contains("Basics", html);
+        Assert.Contains("Criteria", html);
+        Assert.Contains("id=\"doesNotDeadLetter\"", html);
+        Assert.Contains("id=\"waitTimeSeconds\"", html);
+    }
+
+    [Fact]
     public void Explorer_PageRefreshesEntityCountsPeriodically()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -228,6 +249,67 @@ public class SenderEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Single(successHistory.Items);
         Assert.Equal(MessageHistoryOutcome.Success, successHistory.Items[0].Outcome);
         Assert.Empty(failureHistory.Items);
+    }
+
+    [Fact]
+    public async Task PendingHistory_StoresAndRetrievesPendingEntries()
+    {
+        var historyFilePath = Path.Combine(Path.GetTempPath(), $"sender-history-{Guid.NewGuid():N}.ndjson");
+        var store = new FileMessageHistoryStore(historyFilePath, NullLogger<FileMessageHistoryStore>.Instance);
+
+        var pendingEntry = new MessageHistoryEntry(
+            Id: Guid.NewGuid().ToString("N"),
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            QueueName: "default-queue",
+            Outcome: MessageHistoryOutcome.Pending,
+            FailureReason: null,
+            ServiceBusMessageId: "msg-pending",
+            Request: new SendMessageRequest("2026-08-08T00:00:00Z", "default-queue", "receiver", "{\"message\":\"pending\"}", new Dictionary<string, string>()),
+            EffectiveHeaders: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            BodyJson: "{\"message\":\"pending\"}");
+
+        await store.AppendAsync(pendingEntry, CancellationToken.None);
+
+        var pendingHistory = await store.GetByOutcomeAsync(MessageHistoryOutcome.Pending, 20, 0, CancellationToken.None);
+
+        Assert.NotNull(pendingHistory);
+        Assert.Single(pendingHistory.Items);
+        Assert.Equal(MessageHistoryOutcome.Pending, pendingHistory.Items[0].Outcome);
+    }
+
+    [Fact]
+    public void SendMessageRequest_StoresCriteriaValues()
+    {
+        var request = new SendMessageRequest(
+            "2026-08-08T00:00:00Z",
+            "default-queue",
+            "receiver",
+            "{\"message\":\"hello\"}",
+            new Dictionary<string, string>(),
+            null,
+            true,
+            12);
+
+        Assert.True(request.DoesNotDeadLetter);
+        Assert.Equal(12, request.WaitTimeSeconds);
+    }
+
+    [Fact]
+    public void SendMessageRequestValidator_RejectsNegativeWaitTime()
+    {
+        var request = new SendMessageRequest(
+            "2026-08-08T00:00:00Z",
+            "default-queue",
+            "receiver",
+            "{\"message\":\"hello\"}",
+            new Dictionary<string, string>(),
+            null,
+            false,
+            -5);
+
+        var error = SendMessageRequestValidator.Validate(request);
+
+        Assert.Equal("Wait time seconds cannot be negative.", error);
     }
 
     [Fact]

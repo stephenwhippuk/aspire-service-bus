@@ -14,6 +14,11 @@ public static class SendMessageRequestValidator
             return "Standard headers and body are required.";
         }
 
+        if (request.WaitTimeSeconds is < 0)
+        {
+            return "Wait time seconds cannot be negative.";
+        }
+
         try
         {
             using var _ = JsonDocument.Parse(request.BodyJson);
